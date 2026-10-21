@@ -1,69 +1,250 @@
-import Image from "next/image";
+'use client';
 
-export default function Home() {
+import React, { useState, useEffect, useCallback } from 'react';
+import { EventItem, Participant, Prize, Winner } from '@/types';
+import { DataStore, INITIAL_EVENT } from '@/lib/store';
+import { Navbar } from '@/components/Navbar';
+import { StageView } from '@/components/StageView';
+import { WinnersView } from '@/components/WinnersView';
+import { AdminDashboard } from '@/components/AdminDashboard';
+import { Loader2 } from 'lucide-react';
+
+export default function LuckyDrawApp() {
+  const [currentView, setCurrentView] = useState<'stage' | 'winners' | 'admin'>('stage');
+  const [events, setEvents] = useState<EventItem[]>([INITIAL_EVENT]);
+  const [activeEvent, setActiveEvent] = useState<EventItem>(INITIAL_EVENT);
+  const [participants, setParticipants] = useState<Participant[]>([]);
+  const [prizes, setPrizes] = useState<Prize[]>([]);
+  const [winners, setWinners] = useState<Winner[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Load all initial events and data
+  const loadData = useCallback(async (targetEventId?: string) => {
+    setIsLoading(true);
+    try {
+      const allEvents = await DataStore.getEvents();
+      setEvents(allEvents);
+
+      let current = allEvents[0];
+      if (targetEventId) {
+        const found = allEvents.find((e) => e.id === targetEventId);
+        if (found) current = found;
+      } else {
+        current = await DataStore.getActiveEvent();
+      }
+      setActiveEvent(current);
+
+      const [parts, przs, wins] = await Promise.all([
+        DataStore.getParticipants(current.id),
+        DataStore.getPrizes(current.id),
+        DataStore.getWinners(current.id),
+      ]);
+
+      setParticipants(parts);
+      setPrizes(przs);
+      setWinners(wins);
+    } catch (err) {
+      console.error('Failed loading lucky draw data:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Switch Event
+  const handleSelectEvent = async (eventId: string) => {
+    DataStore.setActiveEventId(eventId);
+    await loadData(eventId);
+  };
+
+  // Confirm and Commit Drawn Winners
+  const handleConfirmWinners = async (prize: Prize, selected: Participant[]) => {
+    const pIds = selected.map((p) => p.id);
+    const updatedWinners = await DataStore.commitWinners(activeEvent.id, prize.id, pIds);
+
+    // Refresh state
+    const [parts, przs] = await Promise.all([
+      DataStore.getParticipants(activeEvent.id),
+      DataStore.getPrizes(activeEvent.id),
+    ]);
+
+    setWinners(updatedWinners);
+    setParticipants(parts);
+    setPrizes(przs);
+  };
+
+  // Remove/Cancel single winner (e.g. absent)
+  const handleRemoveWinner = async (winnerId: string, participantId: string, prizeId: string) => {
+    await DataStore.cancelWinner(activeEvent.id, winnerId, participantId, prizeId);
+    const [parts, przs, wins] = await Promise.all([
+      DataStore.getParticipants(activeEvent.id),
+      DataStore.getPrizes(activeEvent.id),
+      DataStore.getWinners(activeEvent.id),
+    ]);
+    setParticipants(parts);
+    setPrizes(przs);
+    setWinners(wins);
+  };
+
+  // Event Theme Save
+  const handleSaveEvent = async (updatedEvent: EventItem) => {
+    await DataStore.saveEvent(updatedEvent);
+    setActiveEvent(updatedEvent);
+    const all = await DataStore.getEvents();
+    setEvents(all);
+  };
+
+  // Create New Event
+  const handleCreateNewEvent = async (name: string, description: string) => {
+    const newEv: EventItem = {
+      id: `event-${Date.now()}`,
+      name,
+      description,
+      event_date: new Date().toISOString().split('T')[0],
+      primary_color: '#EAB308',
+      theme_preset: 'gold',
+      bg_image_url: 'https://images.unsplash.com/photo-1519750157634-b6d493a0f77c?auto=format&fit=crop&w=1920&q=80',
+    };
+    await DataStore.saveEvent(newEv);
+    // Auto initialize 74 prizes for the new event
+    await DataStore.resetDefault74Prizes(newEv.id);
+    await handleSelectEvent(newEv.id);
+  };
+
+  // Import Batch Participants
+  const handleImportParticipants = async (
+    newParts: Omit<Participant, 'id' | 'is_winner' | 'created_at'>[]
+  ) => {
+    const formatted: Participant[] = newParts.map((p, idx) => ({
+      ...p,
+      id: `part-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
+      is_winner: false,
+      created_at: new Date().toISOString(),
+    }));
+    const combined = [...participants, ...formatted];
+    await DataStore.saveParticipants(activeEvent.id, combined);
+    setParticipants(combined);
+  };
+
+  // Add Single Participant
+  const handleAddParticipant = async (
+    item: Omit<Participant, 'id' | 'is_winner' | 'created_at'>
+  ) => {
+    const added = await DataStore.addParticipant(item);
+    setParticipants((prev) => [...prev, added]);
+  };
+
+  // Delete Participant
+  const handleDeleteParticipant = async (id: string) => {
+    await DataStore.deleteParticipant(activeEvent.id, id);
+    setParticipants((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  // Clear All Participants
+  const handleClearParticipants = async () => {
+    await DataStore.clearAllParticipants(activeEvent.id);
+    setParticipants([]);
+  };
+
+  // Reset Participant Winner Status
+  const handleResetParticipantsStatus = async () => {
+    const reset = participants.map((p) => ({ ...p, is_winner: false }));
+    await DataStore.saveParticipants(activeEvent.id, reset);
+    setParticipants(reset);
+  };
+
+  // Reset 74 Prizes
+  const handleReset74Prizes = async () => {
+    const defaultPrizes = await DataStore.resetDefault74Prizes(activeEvent.id);
+    setPrizes(defaultPrizes);
+    alert('74 Hadiah standard telah dijana semula!');
+  };
+
+  // Update Prizes
+  const handleUpdatePrize = async (updatedPrizes: Prize[]) => {
+    await DataStore.savePrizes(activeEvent.id, updatedPrizes);
+    setPrizes(updatedPrizes);
+  };
+
+  // Reset All Draws
+  const handleResetAllDraws = async () => {
+    await DataStore.resetAllDraws(activeEvent.id);
+    const [parts, przs, wins] = await Promise.all([
+      DataStore.getParticipants(activeEvent.id),
+      DataStore.getPrizes(activeEvent.id),
+      DataStore.getWinners(activeEvent.id),
+    ]);
+    setParticipants(parts);
+    setPrizes(przs);
+    setWinners(wins);
+    alert('Semua cabutan telah di-reset!');
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white">
+        <Loader2 className="w-10 h-10 text-yellow-400 animate-spin mb-4" />
+        <h2 className="text-lg font-bold">Memuatkan Sistem Cabutan Bertuah...</h2>
+        <p className="text-xs text-slate-400 mt-1">Sila tunggu sebentar.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className="min-h-screen bg-slate-950 font-sans text-white">
+      {/* Universal Top Navigation */}
+      <Navbar
+        currentView={currentView}
+        onViewChange={setCurrentView}
+        events={events}
+        activeEvent={activeEvent}
+        onSelectEvent={handleSelectEvent}
+      />
+
+      {/* Main Views */}
+      {currentView === 'stage' && (
+        <StageView
+          activeEvent={activeEvent}
+          prizes={prizes}
+          participants={participants}
+          winners={winners}
+          onConfirmWinners={handleConfirmWinners}
+          onRefreshData={() => loadData(activeEvent.id)}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      )}
+
+      {currentView === 'winners' && (
+        <WinnersView
+          activeEvent={activeEvent}
+          winners={winners}
+          prizes={prizes}
+          participants={participants}
+          onRemoveWinner={handleRemoveWinner}
+        />
+      )}
+
+      {currentView === 'admin' && (
+        <AdminDashboard
+          events={events}
+          activeEvent={activeEvent}
+          participants={participants}
+          prizes={prizes}
+          winners={winners}
+          onSaveEvent={handleSaveEvent}
+          onCreateNewEvent={handleCreateNewEvent}
+          onImportParticipants={handleImportParticipants}
+          onAddParticipant={handleAddParticipant}
+          onDeleteParticipant={handleDeleteParticipant}
+          onClearParticipants={handleClearParticipants}
+          onResetParticipantsStatus={handleResetParticipantsStatus}
+          onReset74Prizes={handleReset74Prizes}
+          onUpdatePrize={handleUpdatePrize}
+          onResetAllDraws={handleResetAllDraws}
+        />
+      )}
     </div>
   );
 }
