@@ -18,7 +18,8 @@ import {
   Image,
   Calendar,
   Layers,
-  Sparkles
+  Sparkles,
+  Pencil
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -31,6 +32,7 @@ interface AdminDashboardProps {
   onCreateNewEvent: (name: string, description: string) => Promise<void>;
   onImportParticipants: (newParticipants: Omit<Participant, 'id' | 'is_winner' | 'created_at'>[]) => Promise<void>;
   onAddParticipant: (participant: Omit<Participant, 'id' | 'is_winner' | 'created_at'>) => Promise<void>;
+  onUpdateParticipant: (participant: Participant) => Promise<void>;
   onDeleteParticipant: (id: string) => Promise<void>;
   onClearParticipants: () => Promise<void>;
   onResetParticipantsStatus: () => Promise<void>;
@@ -53,6 +55,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onCreateNewEvent,
   onImportParticipants,
   onAddParticipant,
+  onUpdateParticipant,
   onDeleteParticipant,
   onClearParticipants,
   onResetParticipantsStatus,
@@ -99,6 +102,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Participant search & filter
   const [partSearch, setPartSearch] = useState('');
   const [partStatusFilter, setPartStatusFilter] = useState<'all' | 'unwon' | 'won'>('all');
+
+  // Edit Participant Modal state
+  const [showEditPartModal, setShowEditPartModal] = useState(false);
+  const [editingParticipant, setEditingParticipant] = useState<Participant | null>(null);
+  const [editPartName, setEditPartName] = useState('');
+  const [editPartTicket, setEditPartTicket] = useState('');
+  const [editPartDept, setEditPartDept] = useState('');
+  const [editPartIsWinner, setEditPartIsWinner] = useState(false);
+  const [isSavingPart, setIsSavingPart] = useState(false);
 
   // Wallpaper presets
   const WALLPAPER_PRESETS = [
@@ -300,6 +312,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setNewPartName('');
     setNewPartTicket('');
     setNewPartDept('');
+  };
+
+  const handleOpenEditPart = (p: Participant) => {
+    setEditingParticipant(p);
+    setEditPartName(p.name || '');
+    setEditPartTicket(p.ticket_number || '');
+    setEditPartDept(p.department || '');
+    setEditPartIsWinner(p.is_winner);
+    setShowEditPartModal(true);
+  };
+
+  const handleSaveEditPart = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingParticipant) return;
+
+    let name = editPartName.trim();
+    let ticket = editPartTicket.trim();
+    const dept = editPartDept.trim();
+    const currentMode = activeEvent.participant_mode || 'both';
+
+    if (currentMode === 'name_only') {
+      if (!name) {
+        alert('Sila masukkan Nama Penuh peserta (Wajib).');
+        return;
+      }
+      if (!ticket) {
+        ticket = editingParticipant.ticket_number || `TK-${String(editingParticipant.id).slice(0, 4)}`;
+      }
+    } else if (currentMode === 'ticket_only') {
+      if (!ticket) {
+        alert('Sila masukkan No. Tiket / No. Matrik peserta (Wajib).');
+        return;
+      }
+      if (!name) {
+        name = ticket;
+      }
+    } else {
+      if (!name || !ticket) {
+        alert('Sila masukkan kedua-dua Nama dan No. Tiket peserta (Wajib).');
+        return;
+      }
+    }
+
+    setIsSavingPart(true);
+    try {
+      await onUpdateParticipant({
+        ...editingParticipant,
+        name,
+        ticket_number: ticket,
+        department: dept,
+        is_winner: editPartIsWinner,
+      });
+      setShowEditPartModal(false);
+      setEditingParticipant(null);
+    } catch (err) {
+      console.error('Error updating participant:', err);
+      alert('Ralat semasa mengemaskini maklumat peserta.');
+    } finally {
+      setIsSavingPart(false);
+    }
   };
 
   // Filtered Participants
@@ -597,7 +669,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <th className="py-2.5 px-3">Nama</th>
                     <th className="py-2.5 px-3">Jabatan</th>
                     <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3 text-center">Tindakan</th>
+                    <th className="py-2.5 px-3 text-center w-24">Tindakan</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
@@ -620,13 +692,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           )}
                         </td>
                         <td className="py-2.5 px-3 text-center">
-                          <button
-                            onClick={() => onDeleteParticipant(p.id)}
-                            className="p-1 text-slate-500 hover:text-red-400 transition-colors"
-                            title="Padam peserta"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => handleOpenEditPart(p)}
+                              className="p-1.5 rounded-lg bg-slate-900 hover:bg-yellow-500/20 text-slate-400 hover:text-yellow-400 transition-colors border border-slate-800 hover:border-yellow-500/40"
+                              title="Edit maklumat peserta"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (confirm(`Adakah anda pasti ingin memadam peserta ${p.name || p.ticket_number}?`)) {
+                                  onDeleteParticipant(p.id);
+                                }
+                              }}
+                              className="p-1.5 rounded-lg bg-slate-900 hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors border border-slate-800 hover:border-red-500/40"
+                              title="Padam peserta"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))
@@ -1291,6 +1376,131 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 Jana Hadiah Sekarang
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit Maklumat Peserta */}
+      {showEditPartModal && editingParticipant && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-slate-950 border border-yellow-500/40 rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-start justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Pencil className="w-5 h-5 text-yellow-400" />
+                  <span>Edit Maklumat Peserta</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  Kemaskini butiran peserta majlis cabutan bertuah.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEditPartModal(false);
+                  setEditingParticipant(null);
+                }}
+                className="text-slate-500 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditPart} className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">
+                  Nama Penuh {activeEvent.participant_mode === 'ticket_only' ? <span className="text-slate-500">(Pilihan)</span> : <span className="text-yellow-400 font-bold">* (Wajib)</span>}
+                </label>
+                <input
+                  type="text"
+                  value={editPartName}
+                  onChange={(e) => setEditPartName(e.target.value)}
+                  placeholder="Contoh: Muhammad Ammar bin Roslan"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">
+                  No. Tiket / Matrik {activeEvent.participant_mode === 'name_only' ? <span className="text-slate-500">(Pilihan)</span> : <span className="text-yellow-400 font-bold">* (Wajib)</span>}
+                </label>
+                <input
+                  type="text"
+                  value={editPartTicket}
+                  onChange={(e) => setEditPartTicket(e.target.value)}
+                  placeholder="Contoh: TK-1099 atau A198273"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-sm text-white font-mono focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">
+                  Jabatan / Bahagian <span className="text-slate-500">(Pilihan / Tidak Wajib)</span>
+                </label>
+                <input
+                  type="text"
+                  value={editPartDept}
+                  onChange={(e) => setEditPartDept(e.target.value)}
+                  placeholder="Contoh: Kewangan"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">
+                  Status Kemenangan
+                </label>
+                <div className="grid grid-cols-2 gap-2 bg-slate-900 border border-slate-800 rounded-xl p-2.5">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs p-1 rounded-lg hover:bg-slate-800/60">
+                    <input
+                      type="radio"
+                      name="editStatus"
+                      checked={!editPartIsWinner}
+                      onChange={() => setEditPartIsWinner(false)}
+                      className="text-yellow-500 focus:ring-yellow-400"
+                    />
+                    <span className="text-slate-300 font-medium">Belum Menang</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer text-xs p-1 rounded-lg hover:bg-slate-800/60">
+                    <input
+                      type="radio"
+                      name="editStatus"
+                      checked={editPartIsWinner}
+                      onChange={() => setEditPartIsWinner(true)}
+                      className="text-yellow-500 focus:ring-yellow-400"
+                    />
+                    <span className="text-emerald-400 font-medium">Sudah Menang</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditPartModal(false);
+                    setEditingParticipant(null);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-colors"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingPart}
+                  className="px-5 py-2 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                >
+                  {isSavingPart ? (
+                    <span>Menyimpan...</span>
+                  ) : (
+                    <>
+                      <Save className="w-3.5 h-3.5" />
+                      <span>Simpan Perubahan</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -296,6 +296,33 @@ export const DataStore = {
     await this.saveParticipants(eventId, filtered);
   },
 
+  async updateParticipant(eventId: string, updated: Participant): Promise<Participant> {
+    const current = await this.getParticipants(eventId);
+    const index = current.findIndex((p) => p.id === updated.id);
+    if (index >= 0) {
+      current[index] = { ...current[index], ...updated };
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`${LS_KEYS.PARTICIPANTS}_${eventId}`, JSON.stringify(current));
+    }
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase
+          .from('participants')
+          .update({
+            name: updated.name,
+            ticket_number: updated.ticket_number,
+            department: updated.department,
+            is_winner: updated.is_winner,
+          })
+          .eq('id', updated.id);
+      } catch (err) {
+        console.error('Supabase updateParticipant error:', err);
+      }
+    }
+    return updated;
+  },
+
   async clearAllParticipants(eventId: string): Promise<void> {
     await this.saveParticipants(eventId, []);
   },

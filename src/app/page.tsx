@@ -141,6 +141,14 @@ export default function LuckyDrawApp() {
     setParticipants((prev) => prev.filter((p) => p.id !== id));
   };
 
+  // Update Individual Participant
+  const handleUpdateParticipant = async (updated: Participant) => {
+    await DataStore.updateParticipant(activeEvent.id, updated);
+    setParticipants((prev) =>
+      prev.map((p) => (p.id === updated.id ? updated : p))
+    );
+  };
+
   // Clear All Participants
   const handleClearParticipants = async () => {
     await DataStore.clearAllParticipants(activeEvent.id);
@@ -269,6 +277,7 @@ export default function LuckyDrawApp() {
           onCreateNewEvent={handleCreateNewEvent}
           onImportParticipants={handleImportParticipants}
           onAddParticipant={handleAddParticipant}
+          onUpdateParticipant={handleUpdateParticipant}
           onDeleteParticipant={handleDeleteParticipant}
           onClearParticipants={handleClearParticipants}
           onResetParticipantsStatus={handleResetParticipantsStatus}
