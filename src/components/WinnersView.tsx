@@ -30,7 +30,7 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
   onRemoveWinner,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<'all' | 'Hadiah Utama' | 'Hadiah Sampingan'>('all');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
   // Filter winners
   const filteredWinners = winners.filter((w) => {
@@ -50,6 +50,15 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
 
     return matchesSearch && matchesCat;
   });
+
+  // Dynamic categories from actual winners
+  const categories = Array.from(
+    new Set(
+      winners
+        .map((w) => w.prize?.category)
+        .filter((cat): cat is string => Boolean(cat))
+    )
+  );
 
   // Export to CSV
   const handleExportCSV = () => {
@@ -167,7 +176,7 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
         </div>
 
         {/* Category Pills */}
-        <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs">
+        <div className="flex flex-wrap items-center gap-1.5 bg-slate-900 p-1 rounded-xl border border-slate-800 text-xs">
           <button
             onClick={() => setSelectedCategory('all')}
             className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${
@@ -178,26 +187,22 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
           >
             Semua ({winners.length})
           </button>
-          <button
-            onClick={() => setSelectedCategory('Hadiah Utama')}
-            className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${
-              selectedCategory === 'Hadiah Utama'
-                ? 'bg-yellow-500 text-slate-950 font-bold'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Hadiah Utama (1-33)
-          </button>
-          <button
-            onClick={() => setSelectedCategory('Hadiah Sampingan')}
-            className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${
-              selectedCategory === 'Hadiah Sampingan'
-                ? 'bg-yellow-500 text-slate-950 font-bold'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Saguhati (34-74)
-          </button>
+          {categories.map((cat) => {
+            const count = winners.filter((w) => w.prize?.category === cat).length;
+            return (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3 py-1.5 rounded-lg font-semibold transition-all ${
+                  selectedCategory === cat
+                    ? 'bg-yellow-500 text-slate-950 font-bold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {cat} ({count})
+              </button>
+            );
+          })}
         </div>
       </div>
 

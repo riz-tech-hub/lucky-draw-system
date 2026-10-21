@@ -227,7 +227,7 @@ export const StageView: React.FC<StageViewProps> = ({
             <Gift className="w-16 h-16 text-yellow-500 mx-auto mb-4 opacity-50" />
             <h3 className="text-xl font-bold">Tiada Hadiah Dijumpai</h3>
             <p className="text-sm text-slate-400 mt-1">
-              Sila pergi ke Admin Dashboard untuk menjana senarai 74 hadiah.
+              Sila pergi ke Admin Dashboard untuk menambah hadiah majlis anda atau jana hadiah secara pukal.
             </p>
           </div>
         )}

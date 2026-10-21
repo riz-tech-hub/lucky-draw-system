@@ -227,22 +227,17 @@ export const DataStore = {
 
     if (typeof window === 'undefined') return [];
     const stored = localStorage.getItem(`${LS_KEYS.PARTICIPANTS}_${eventId}`);
-    const isInit = localStorage.getItem(`${LS_KEYS.INITIALIZED}_parts_${eventId}`);
 
-    // If user has already visited or customized, return what's stored (even if empty [])
-    if (stored !== null || isInit === 'true') {
+    // If stored in localStorage, respect whatever list the user has (including empty [])
+    if (stored !== null) {
       try {
-        return stored ? JSON.parse(stored) : [];
+        return JSON.parse(stored);
       } catch {
         return [];
       }
     }
 
-    // First time ever opening the demo app without prior setup: seed initial demo list
-    const defaults = createDefaultParticipants(eventId);
-    localStorage.setItem(`${LS_KEYS.PARTICIPANTS}_${eventId}`, JSON.stringify(defaults));
-    localStorage.setItem(`${LS_KEYS.INITIALIZED}_parts_${eventId}`, 'true');
-    return defaults;
+    return [];
   },
 
   async saveParticipants(eventId: string, list: Participant[]): Promise<void> {
@@ -315,22 +310,17 @@ export const DataStore = {
 
     if (typeof window === 'undefined') return [];
     const stored = localStorage.getItem(`${LS_KEYS.PRIZES}_${eventId}`);
-    const isInit = localStorage.getItem(`${LS_KEYS.INITIALIZED}_prizes_${eventId}`);
 
-    // If already initialized/visited, respect whatever list the user has (even if 1 prize!)
-    if (stored !== null || isInit === 'true') {
+    // If stored in localStorage, respect whatever list the user has (including empty [])
+    if (stored !== null) {
       try {
-        return stored ? JSON.parse(stored) : [];
+        return JSON.parse(stored);
       } catch {
         return [];
       }
     }
 
-    // Only first time ever opening an empty demo event
-    const defaultPrizes = createDefault74Prizes(eventId);
-    localStorage.setItem(`${LS_KEYS.PRIZES}_${eventId}`, JSON.stringify(defaultPrizes));
-    localStorage.setItem(`${LS_KEYS.INITIALIZED}_prizes_${eventId}`, 'true');
-    return defaultPrizes;
+    return [];
   },
 
   async savePrizes(eventId: string, prizes: Prize[]): Promise<void> {
