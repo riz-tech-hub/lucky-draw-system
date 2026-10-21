@@ -35,6 +35,10 @@ interface AdminDashboardProps {
   onClearParticipants: () => Promise<void>;
   onResetParticipantsStatus: () => Promise<void>;
   onReset74Prizes: () => Promise<void>;
+  onAddPrize: (prize: Omit<Prize, 'id' | 'is_drawn' | 'created_at'>) => Promise<void>;
+  onDeletePrize: (id: string) => Promise<void>;
+  onClearAllPrizes: () => Promise<void>;
+  onGenerateCustomPrizes: (total: number, grand: number, batch: number) => Promise<void>;
   onUpdatePrize: (updatedPrizes: Prize[]) => Promise<void>;
   onResetAllDraws: () => Promise<void>;
 }
@@ -53,10 +57,31 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onClearParticipants,
   onResetParticipantsStatus,
   onReset74Prizes,
+  onAddPrize,
+  onDeletePrize,
+  onClearAllPrizes,
+  onGenerateCustomPrizes,
   onUpdatePrize,
   onResetAllDraws,
 }) => {
   const [activeTab, setActiveTab] = useState<'participants' | 'prizes' | 'theme' | 'danger'>('participants');
+
+  // Custom prize modals state
+  const [showAddPrizeModal, setShowAddPrizeModal] = useState(false);
+  const [showCustomGenModal, setShowCustomGenModal] = useState(false);
+
+  // New Prize Form
+  const [prizeName, setPrizeName] = useState('');
+  const [prizeCategory, setPrizeCategory] = useState('Hadiah Utama');
+  const [prizeRank, setPrizeRank] = useState(1);
+  const [prizeDrawType, setPrizeDrawType] = useState<'single' | 'batch'>('single');
+  const [prizeBatchSize, setPrizeBatchSize] = useState(1);
+  const [prizeImageUrl, setPrizeImageUrl] = useState('');
+
+  // Custom Prize Generator
+  const [genTotal, setGenTotal] = useState(30);
+  const [genGrand, setGenGrand] = useState(5);
+  const [genBatch, setGenBatch] = useState(5);
 
   // New participant form state
   const [newPartName, setNewPartName] = useState('');
@@ -446,134 +471,234 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       )}
 
       {/* ========================================================================= */}
-      {/* TAB 2: PENGURUSAN HADIAH (74 Hadiah)                                      */}
+      {/* TAB 2: PENGURUSAN HADIAH (FLEKSIBEL - BEBAS BERAPA JUMLAH & TAJUK)        */}
       {/* ========================================================================= */}
       {activeTab === 'prizes' && (
         <div className="space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-2xl glass-panel border border-yellow-500/30">
+          <div className="flex flex-wrap items-center justify-between gap-4 p-5 rounded-2xl glass-panel border border-yellow-500/30">
             <div>
-              <h3 className="font-bold text-base text-white">Struktur 74 Hadiah Program</h3>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-yellow-400 uppercase tracking-wider">Kustomisasi Hadiah</span>
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">
+                  {prizes.length} Hadiah Didaftarkan
+                </span>
+              </div>
+              <h3 className="font-extrabold text-lg text-white mt-0.5">Senarai & Kategori Hadiah Majlis</h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                Hadiah 74 - 34: Saguhati (Mod Pukal 10 serentak). Hadiah 33 - 1: Hadiah Utama (Mod 1-by-1 dramatik).
+                Anda boleh meletakkan sebarang tajuk, bilangan hadiah, dan mengubah mod cabutan pada bila-bila masa.
               </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
               <button
-                onClick={onReset74Prizes}
-                className="px-4 py-2 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-2 shadow"
+                onClick={() => {
+                  setPrizeRank(prizes.length > 0 ? Math.max(...prizes.map((p) => p.rank_order)) + 1 : 1);
+                  setPrizeName('');
+                  setShowAddPrizeModal(true);
+                }}
+                className="px-4 py-2.5 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-2 shadow-lg shadow-yellow-500/20"
               >
-                <RefreshCw className="w-4 h-4" />
-                <span>Jana Semula 74 Hadiah Standard</span>
+                <Plus className="w-4 h-4" />
+                <span>+ Tambah Hadiah Baharu</span>
+              </button>
+
+              <button
+                onClick={() => setShowCustomGenModal(true)}
+                className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-yellow-300 border border-yellow-500/30 font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-2"
+              >
+                <Sparkles className="w-4 h-4 text-yellow-400" />
+                <span>Jana Hadiah Pukal (Pilihan Jumlah)</span>
+              </button>
+
+              <button
+                onClick={onReset74Prizes}
+                className="px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-all flex items-center gap-1.5"
+                title="Guna templat asal 74 hadiah"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Format Asal 74</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (confirm('AMARAN: Anda pasti ingin mengosongkan SEMUA hadiah untuk majlis ini?')) {
+                    onClearAllPrizes();
+                  }
+                }}
+                className="px-3.5 py-2.5 rounded-xl bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 font-semibold text-xs transition-all flex items-center gap-1.5"
+                title="Padam semua hadiah dan mulakan semula"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Kosongkan Semua</span>
               </button>
             </div>
           </div>
 
           {/* Quick Bulk Batch Size Setters */}
-          <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs">
-            <span className="font-semibold text-slate-300">
-              Tukar Saiz Cabutan Sekali Klik untuk Semua Hadiah Saguhati (Pukal):
-            </span>
-            <div className="flex items-center gap-1.5">
-              {[5, 10, 15, 20].map((size) => (
-                <button
-                  key={size}
-                  onClick={() => {
-                    const updated = prizes.map((p) =>
-                      p.draw_type === 'batch' ? { ...p, batch_size: size } : p
-                    );
-                    onUpdatePrize(updated);
-                  }}
-                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-yellow-500 hover:text-slate-950 border border-slate-700 text-yellow-300 font-bold transition-all text-xs"
-                >
-                  {size} Sekali Klik
-                </button>
-              ))}
+          {prizes.some((p) => p.draw_type === 'batch') && (
+            <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs">
+              <span className="font-semibold text-slate-300">
+                Tukar Saiz Cabutan Sekali Klik untuk Semua Hadiah Pukal:
+              </span>
+              <div className="flex items-center gap-1.5">
+                {[5, 10, 15, 20].map((size) => (
+                  <button
+                    key={size}
+                    onClick={() => {
+                      const updated = prizes.map((p) =>
+                        p.draw_type === 'batch' ? { ...p, batch_size: size } : p
+                      );
+                      onUpdatePrize(updated);
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-yellow-500 hover:text-slate-950 border border-slate-700 text-yellow-300 font-bold transition-all text-xs"
+                  >
+                    {size} Sekali Klik
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
+          {/* Prizes Table with inline name, category, mode, batch editing, and delete */}
           <div className="bg-slate-950/80 rounded-2xl border border-slate-800 overflow-hidden">
-            <div className="overflow-x-auto max-h-[550px]">
+            <div className="overflow-x-auto max-h-[580px]">
               <table className="w-full text-left text-xs sm:text-sm">
                 <thead className="bg-slate-900 sticky top-0 uppercase tracking-wider text-[11px] text-slate-400 border-b border-slate-800">
                   <tr>
                     <th className="py-2.5 px-3 w-16 text-center">Urutan</th>
-                    <th className="py-2.5 px-3">Nama Hadiah</th>
+                    <th className="py-2.5 px-3">Tajuk / Nama Hadiah (Boleh Edit Terus)</th>
                     <th className="py-2.5 px-3">Kategori</th>
                     <th className="py-2.5 px-3">Mod Cabutan</th>
                     <th className="py-2.5 px-3 text-center">Saiz Batch</th>
                     <th className="py-2.5 px-3 text-center">Status</th>
+                    <th className="py-2.5 px-3 text-center w-16">Padam</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-850">
-                  {prizes.map((prz) => (
-                    <tr key={prz.id} className="hover:bg-slate-900/40">
-                      <td className="py-2.5 px-3 text-center font-mono font-bold text-yellow-400">
-                        #{prz.rank_order}
-                      </td>
-                      <td className="py-2.5 px-3 font-semibold text-white">
-                        {prz.name}
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          prz.category === 'Hadiah Utama'
-                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                            : 'bg-slate-800 text-slate-400'
-                        }`}>
-                          {prz.category}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3">
-                        <select
-                          value={prz.draw_type}
-                          onChange={(e) => {
-                            const newType = e.target.value as 'batch' | 'single';
-                            const updated = prizes.map((p) =>
-                              p.id === prz.id
-                                ? { ...p, draw_type: newType, batch_size: newType === 'single' ? 1 : Math.max(2, p.batch_size) }
-                                : p
-                            );
-                            onUpdatePrize(updated);
-                          }}
-                          className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-yellow-400"
-                        >
-                          <option value="single">Individu (Single)</option>
-                          <option value="batch">Pukal (Batch)</option>
-                        </select>
-                      </td>
-                      <td className="py-2.5 px-3 text-center">
-                        {prz.draw_type === 'batch' ? (
+                  {prizes.length > 0 ? (
+                    prizes.map((prz) => (
+                      <tr key={prz.id} className="hover:bg-slate-900/40">
+                        {/* Rank order */}
+                        <td className="py-2.5 px-3 text-center font-mono font-bold text-yellow-400">
+                          #{prz.rank_order}
+                        </td>
+
+                        {/* Editable Name Input */}
+                        <td className="py-2.5 px-3">
                           <input
-                            type="number"
-                            min={1}
-                            max={100}
-                            value={prz.batch_size}
+                            type="text"
+                            value={prz.name}
                             onChange={(e) => {
-                              const newSize = Math.max(1, parseInt(e.target.value) || 1);
+                              const newName = e.target.value;
                               const updated = prizes.map((p) =>
-                                p.id === prz.id ? { ...p, batch_size: newSize } : p
+                                p.id === prz.id ? { ...p, name: newName } : p
                               );
                               onUpdatePrize(updated);
                             }}
-                            className="w-16 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-center font-mono font-bold text-yellow-300 text-xs focus:outline-none focus:border-yellow-400"
+                            className="w-full bg-slate-900/90 border border-slate-750 hover:border-yellow-500/60 focus:border-yellow-400 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm font-semibold text-white focus:outline-none transition-all"
+                            placeholder="Masukkan tajuk hadiah..."
                           />
-                        ) : (
-                          <span className="font-mono text-slate-500 text-xs">1</span>
-                        )}
-                      </td>
-                      <td className="py-2.5 px-3 text-center">
-                        {prz.is_drawn ? (
-                          <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                            Selesai
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-slate-800 text-slate-400">
-                            Belum
-                          </span>
-                        )}
+                        </td>
+
+                        {/* Editable Category Input */}
+                        <td className="py-2.5 px-3">
+                          <input
+                            type="text"
+                            value={prz.category}
+                            onChange={(e) => {
+                              const newCat = e.target.value;
+                              const updated = prizes.map((p) =>
+                                p.id === prz.id ? { ...p, category: newCat } : p
+                              );
+                              onUpdatePrize(updated);
+                            }}
+                            className="w-28 sm:w-36 bg-slate-900 border border-slate-750 hover:border-yellow-500/60 focus:border-yellow-400 rounded-lg px-2 py-1 text-xs text-amber-200 focus:outline-none"
+                            placeholder="Kategori"
+                          />
+                        </td>
+
+                        {/* Draw Type Selector */}
+                        <td className="py-2.5 px-3">
+                          <select
+                            value={prz.draw_type}
+                            onChange={(e) => {
+                              const newType = e.target.value as 'batch' | 'single';
+                              const updated = prizes.map((p) =>
+                                p.id === prz.id
+                                  ? { ...p, draw_type: newType, batch_size: newType === 'single' ? 1 : Math.max(2, p.batch_size) }
+                                  : p
+                              );
+                              onUpdatePrize(updated);
+                            }}
+                            className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-yellow-400 cursor-pointer"
+                          >
+                            <option value="single">Individu (1-demi-1)</option>
+                            <option value="batch">Pukal (Batch)</option>
+                          </select>
+                        </td>
+
+                        {/* Batch Size Input */}
+                        <td className="py-2.5 px-3 text-center">
+                          {prz.draw_type === 'batch' ? (
+                            <input
+                              type="number"
+                              min={1}
+                              max={100}
+                              value={prz.batch_size}
+                              onChange={(e) => {
+                                const newSize = Math.max(1, parseInt(e.target.value) || 1);
+                                const updated = prizes.map((p) =>
+                                  p.id === prz.id ? { ...p, batch_size: newSize } : p
+                                );
+                                onUpdatePrize(updated);
+                              }}
+                              className="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-center font-mono font-bold text-yellow-300 text-xs focus:outline-none focus:border-yellow-400"
+                            />
+                          ) : (
+                            <span className="font-mono text-slate-500 text-xs">1</span>
+                          )}
+                        </td>
+
+                        {/* Status */}
+                        <td className="py-2.5 px-3 text-center">
+                          {prz.is_drawn ? (
+                            <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                              Selesai
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-slate-800 text-slate-400">
+                              Belum
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Delete Action */}
+                        <td className="py-2.5 px-3 text-center">
+                          <button
+                            onClick={() => {
+                              if (confirm(`Pasti ingin padam hadiah: "${prz.name}"?`)) {
+                                onDeletePrize(prz.id);
+                              }
+                            }}
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                            title="Padam hadiah ini"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-slate-500">
+                        <Trophy className="w-10 h-10 mx-auto text-slate-600 mb-2" />
+                        <p className="font-semibold text-slate-300">Tiada hadiah didaftarkan lagi.</p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Klik butang &quot;+ Tambah Hadiah Baharu&quot; di atas untuk memasukkan hadiah majlis anda.
+                        </p>
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
@@ -778,6 +903,218 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 className="px-5 py-2 rounded-xl bg-yellow-500 text-slate-950 font-bold text-xs"
               >
                 Cipta Majlis
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Tambah Hadiah Baharu (Custom Single Prize) */}
+      {showAddPrizeModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-slate-950 border border-yellow-500/40 rounded-3xl p-6 shadow-2xl space-y-4">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <Trophy className="w-5 h-5 text-yellow-400" />
+              <span>Tambah Hadiah Baharu</span>
+            </h3>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Tajuk / Nama Hadiah *</label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Pakej Percutian 3H2M ke Pulau Tioman"
+                  value={prizeName}
+                  onChange={(e) => setPrizeName(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">Kategori</label>
+                  <input
+                    type="text"
+                    placeholder="Contoh: Hadiah Utama"
+                    value={prizeCategory}
+                    onChange={(e) => setPrizeCategory(e.target.value)}
+                    className="w-full bg-slate-900 border border-slate-750 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">Nombor Urutan (Rank) *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={prizeRank}
+                    onChange={(e) => setPrizeRank(parseInt(e.target.value) || 1)}
+                    className="w-full bg-slate-900 border border-slate-750 rounded-xl px-3 py-2 text-xs text-white font-mono font-bold text-yellow-400 focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">Mod Cabutan</label>
+                  <select
+                    value={prizeDrawType}
+                    onChange={(e) => {
+                      const dt = e.target.value as 'single' | 'batch';
+                      setPrizeDrawType(dt);
+                      if (dt === 'single') setPrizeBatchSize(1);
+                      else if (prizeBatchSize === 1) setPrizeBatchSize(10);
+                    }}
+                    className="w-full bg-slate-900 border border-slate-750 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-yellow-400 cursor-pointer"
+                  >
+                    <option value="single">Individu (1-demi-1)</option>
+                    <option value="batch">Pukal (Batch)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">Saiz Cabutan (Sekali Klik)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={100}
+                    disabled={prizeDrawType === 'single'}
+                    value={prizeBatchSize}
+                    onChange={(e) => setPrizeBatchSize(parseInt(e.target.value) || 1)}
+                    className="w-full bg-slate-900 border border-slate-750 rounded-xl px-3 py-2 text-xs text-white font-mono font-bold focus:outline-none focus:ring-1 focus:ring-yellow-400 disabled:opacity-40"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">URL Gambar Hadiah (Pilihan)</label>
+                <input
+                  type="text"
+                  placeholder="https://example.com/hadiah.jpg"
+                  value={prizeImageUrl}
+                  onChange={(e) => setPrizeImageUrl(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowAddPrizeModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-semibold text-xs"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!prizeName.trim()) {
+                    alert('Sila masukkan tajuk hadiah.');
+                    return;
+                  }
+                  await onAddPrize({
+                    event_id: activeEvent.id,
+                    name: prizeName,
+                    category: prizeCategory || 'Hadiah Umum',
+                    rank_order: prizeRank,
+                    draw_type: prizeDrawType,
+                    batch_size: prizeBatchSize,
+                    image_url: prizeImageUrl || undefined,
+                  });
+                  setShowAddPrizeModal(false);
+                  setPrizeName('');
+                  setPrizeImageUrl('');
+                }}
+                className="px-5 py-2 rounded-xl bg-yellow-500 text-slate-950 font-bold text-xs"
+              >
+                Simpan Hadiah
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Jana Hadiah Pukal Mengikut Jumlah Pilihan Anda */}
+      {showCustomGenModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-slate-950 border border-yellow-500/40 rounded-3xl p-6 shadow-2xl space-y-4">
+            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-yellow-400" />
+              <span>Jana Hadiah Pukal (Pilihan Bebas)</span>
+            </h3>
+            <p className="text-xs text-slate-400">
+              Tetapkan jumlah hadiah yang anda inginkan tanpa terikat dengan format 74 hadiah.
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">
+                  Berapa Jumlah Keseluruhan Hadiah Anda?
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={genTotal}
+                  onChange={(e) => setGenTotal(parseInt(e.target.value) || 1)}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-xl px-3.5 py-2 text-sm text-yellow-300 font-bold font-mono focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">
+                  Berapa Hadiah Utama (Mod 1-demi-1)?
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={genTotal}
+                  value={genGrand}
+                  onChange={(e) => setGenGrand(parseInt(e.target.value) || 1)}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-xl px-3.5 py-2 text-sm text-white font-mono focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                />
+                <span className="text-[11px] text-slate-500">
+                  (Hadiah #{genGrand} hingga #1 akan dicabut secara individu)
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">
+                  Saiz Cabutan Sekali Klik untuk Hadiah Sampingan (Pukal):
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={genBatch}
+                  onChange={(e) => setGenBatch(parseInt(e.target.value) || 5)}
+                  className="w-full bg-slate-900 border border-slate-750 rounded-xl px-3.5 py-2 text-sm text-white font-mono focus:outline-none focus:ring-1 focus:ring-yellow-400"
+                />
+                <span className="text-[11px] text-slate-500">
+                  (Baki hadiah sampingan akan dicabut {genBatch} serentak setiap klik)
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowCustomGenModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 font-semibold text-xs"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (genTotal < 1) return;
+                  await onGenerateCustomPrizes(genTotal, genGrand, genBatch);
+                  setShowCustomGenModal(false);
+                }}
+                className="px-5 py-2 rounded-xl bg-yellow-500 text-slate-950 font-bold text-xs"
+              >
+                Jana Hadiah Sekarang
               </button>
             </div>
           </div>

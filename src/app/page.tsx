@@ -163,6 +163,40 @@ export default function LuckyDrawApp() {
     alert('74 Hadiah standard telah dijana semula!');
   };
 
+  // Add Custom Prize
+  const handleAddPrize = async (item: Omit<Prize, 'id' | 'is_drawn' | 'created_at'>) => {
+    const added = await DataStore.addPrize(item);
+    setPrizes((prev) => [...prev, added].sort((a, b) => b.rank_order - a.rank_order));
+  };
+
+  // Delete Individual Prize
+  const handleDeletePrize = async (prizeId: string) => {
+    await DataStore.deletePrize(activeEvent.id, prizeId);
+    setPrizes((prev) => prev.filter((p) => p.id !== prizeId));
+  };
+
+  // Clear All Prizes (Start from scratch)
+  const handleClearAllPrizes = async () => {
+    await DataStore.clearAllPrizes(activeEvent.id);
+    setPrizes([]);
+  };
+
+  // Generate Custom Total Prizes (e.g. 10, 30, 50, etc.)
+  const handleGenerateCustomPrizes = async (
+    totalCount: number,
+    grandCount: number,
+    batchSize: number
+  ) => {
+    const generated = await DataStore.generateCustomPrizes(
+      activeEvent.id,
+      totalCount,
+      grandCount,
+      batchSize
+    );
+    setPrizes(generated);
+    alert(`Berjaya menjana ${generated.length} hadiah tersuai!`);
+  };
+
   // Update Prizes
   const handleUpdatePrize = async (updatedPrizes: Prize[]) => {
     await DataStore.savePrizes(activeEvent.id, updatedPrizes);
@@ -241,6 +275,10 @@ export default function LuckyDrawApp() {
           onClearParticipants={handleClearParticipants}
           onResetParticipantsStatus={handleResetParticipantsStatus}
           onReset74Prizes={handleReset74Prizes}
+          onAddPrize={handleAddPrize}
+          onDeletePrize={handleDeletePrize}
+          onClearAllPrizes={handleClearAllPrizes}
+          onGenerateCustomPrizes={handleGenerateCustomPrizes}
           onUpdatePrize={handleUpdatePrize}
           onResetAllDraws={handleResetAllDraws}
         />

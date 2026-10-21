@@ -321,6 +321,88 @@ export const DataStore = {
     return prizes;
   },
 
+  async addPrize(prize: Omit<Prize, 'id' | 'is_drawn' | 'created_at'>): Promise<Prize> {
+    const newPrize: Prize = {
+      ...prize,
+      id: `prize-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      is_drawn: false,
+      created_at: new Date().toISOString(),
+    };
+
+    if (isSupabaseConfigured() && supabase) {
+      const { data } = await supabase.from('prizes').insert(newPrize).select().single();
+      if (data) return data as Prize;
+    }
+
+    const current = await this.getPrizes(prize.event_id);
+    current.push(newPrize);
+    current.sort((a, b) => b.rank_order - a.rank_order);
+    await this.savePrizes(prize.event_id, current);
+    return newPrize;
+  },
+
+  async deletePrize(eventId: string, prizeId: string): Promise<void> {
+    if (isSupabaseConfigured() && supabase) {
+      await supabase.from('prizes').delete().eq('id', prizeId);
+      return;
+    }
+    const current = await this.getPrizes(eventId);
+    const filtered = current.filter((p) => p.id !== prizeId);
+    await this.savePrizes(eventId, filtered);
+  },
+
+  async clearAllPrizes(eventId: string): Promise<void> {
+    if (isSupabaseConfigured() && supabase) {
+      await supabase.from('prizes').delete().eq('event_id', eventId);
+      return;
+    }
+    await this.savePrizes(eventId, []);
+  },
+
+  async generateCustomPrizes(
+    eventId: string,
+    totalPrizes: number,
+    grandCount: number,
+    batchSize: number
+  ): Promise<Prize[]> {
+    const prizes: Prize[] = [];
+    const actualGrand = Math.min(grandCount, totalPrizes);
+
+    // Saguhati prizes: rank totalPrizes down to (actualGrand + 1)
+    for (let r = totalPrizes; r > actualGrand; r--) {
+      prizes.push({
+        id: `prize-${eventId}-${r}`,
+        event_id: eventId,
+        name: `Hadiah Saguhati #${r}`,
+        category: 'Hadiah Sampingan',
+        rank_order: r,
+        draw_type: 'batch',
+        batch_size: batchSize,
+        is_drawn: false,
+        created_at: new Date().toISOString(),
+      });
+    }
+
+    // Grand prizes: rank actualGrand down to 1
+    for (let r = actualGrand; r >= 1; r--) {
+      prizes.push({
+        id: `prize-${eventId}-${r}`,
+        event_id: eventId,
+        name: r === 1 ? 'HADIAH UTAMA #1' : `HADIAH UTAMA #${r}`,
+        category: 'Hadiah Utama',
+        rank_order: r,
+        draw_type: 'single',
+        batch_size: 1,
+        is_drawn: false,
+        created_at: new Date().toISOString(),
+      });
+    }
+
+    prizes.sort((a, b) => b.rank_order - a.rank_order);
+    await this.savePrizes(eventId, prizes);
+    return prizes;
+  },
+
   // ----------------------------------------------------------------------------
   // WINNERS & DRAW RECORDING
   // ----------------------------------------------------------------------------
