@@ -458,13 +458,38 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </p>
             </div>
 
-            <button
-              onClick={onReset74Prizes}
-              className="px-4 py-2 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-2 shadow"
-            >
-              <RefreshCw className="w-4 h-4" />
-              <span>Jana Semula 74 Hadiah Standard</span>
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={onReset74Prizes}
+                className="px-4 py-2 rounded-xl bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold text-xs uppercase tracking-wider transition-all flex items-center gap-2 shadow"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Jana Semula 74 Hadiah Standard</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Bulk Batch Size Setters */}
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs">
+            <span className="font-semibold text-slate-300">
+              Tukar Saiz Cabutan Sekali Klik untuk Semua Hadiah Saguhati (Pukal):
+            </span>
+            <div className="flex items-center gap-1.5">
+              {[5, 10, 15, 20].map((size) => (
+                <button
+                  key={size}
+                  onClick={() => {
+                    const updated = prizes.map((p) =>
+                      p.draw_type === 'batch' ? { ...p, batch_size: size } : p
+                    );
+                    onUpdatePrize(updated);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-yellow-500 hover:text-slate-950 border border-slate-700 text-yellow-300 font-bold transition-all text-xs"
+                >
+                  {size} Sekali Klik
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="bg-slate-950/80 rounded-2xl border border-slate-800 overflow-hidden">
@@ -499,12 +524,42 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         </span>
                       </td>
                       <td className="py-2.5 px-3">
-                        <span className="font-semibold text-xs text-slate-300 uppercase">
-                          {prz.draw_type === 'batch' ? 'Pukal (Batch)' : 'Individu (Single)'}
-                        </span>
+                        <select
+                          value={prz.draw_type}
+                          onChange={(e) => {
+                            const newType = e.target.value as 'batch' | 'single';
+                            const updated = prizes.map((p) =>
+                              p.id === prz.id
+                                ? { ...p, draw_type: newType, batch_size: newType === 'single' ? 1 : Math.max(2, p.batch_size) }
+                                : p
+                            );
+                            onUpdatePrize(updated);
+                          }}
+                          className="bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-yellow-400"
+                        >
+                          <option value="single">Individu (Single)</option>
+                          <option value="batch">Pukal (Batch)</option>
+                        </select>
                       </td>
-                      <td className="py-2.5 px-3 text-center font-mono">
-                        {prz.batch_size}
+                      <td className="py-2.5 px-3 text-center">
+                        {prz.draw_type === 'batch' ? (
+                          <input
+                            type="number"
+                            min={1}
+                            max={100}
+                            value={prz.batch_size}
+                            onChange={(e) => {
+                              const newSize = Math.max(1, parseInt(e.target.value) || 1);
+                              const updated = prizes.map((p) =>
+                                p.id === prz.id ? { ...p, batch_size: newSize } : p
+                              );
+                              onUpdatePrize(updated);
+                            }}
+                            className="w-16 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-center font-mono font-bold text-yellow-300 text-xs focus:outline-none focus:border-yellow-400"
+                          />
+                        ) : (
+                          <span className="font-mono text-slate-500 text-xs">1</span>
+                        )}
                       </td>
                       <td className="py-2.5 px-3 text-center">
                         {prz.is_drawn ? (

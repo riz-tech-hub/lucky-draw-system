@@ -10,8 +10,10 @@ import {
   Trophy,
   Gift,
   CheckCircle2,
-  Layers,
-  Sparkles
+  Sparkles,
+  Sliders,
+  User,
+  Users
 } from 'lucide-react';
 
 interface StageViewProps {
@@ -39,19 +41,30 @@ export const StageView: React.FC<StageViewProps> = ({
     firstUndrawnIndex >= 0 ? firstUndrawnIndex : 0
   );
 
+  // Manual mode override for the active draw (allows toggling single vs batch on the fly)
+  const [modeOverride, setModeOverride] = useState<'auto' | 'single' | 'batch'>('auto');
+
   const currentPrize = sortedPrizes[selectedPrizeIndex] || sortedPrizes[0];
   const eligibleParticipants = participants.filter((p) => !p.is_winner);
+
+  // Active draw type considering override
+  const activeDrawType =
+    modeOverride === 'auto'
+      ? (currentPrize?.draw_type || 'single')
+      : modeOverride;
 
   // Navigate prizes
   const handlePrevPrize = () => {
     if (selectedPrizeIndex > 0) {
       setSelectedPrizeIndex(selectedPrizeIndex - 1);
+      setModeOverride('auto');
     }
   };
 
   const handleNextPrize = () => {
     if (selectedPrizeIndex < sortedPrizes.length - 1) {
       setSelectedPrizeIndex(selectedPrizeIndex + 1);
+      setModeOverride('auto');
     }
   };
 
@@ -72,7 +85,7 @@ export const StageView: React.FC<StageViewProps> = ({
       className="min-h-[calc(100vh-61px)] w-full flex flex-col justify-between p-4 sm:p-6 lg:p-8 text-white relative select-none"
     >
       {/* Top Bar: Event Title, Logo, & Quick Stats */}
-      <div className="w-full max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-4 mb-6">
+      <div className="w-full max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-4 mb-4">
         <div className="flex items-center gap-3">
           {activeEvent.logo_url && (
             // eslint-disable-next-line @next/next/no-img-element
@@ -112,9 +125,10 @@ export const StageView: React.FC<StageViewProps> = ({
         </div>
       </div>
 
-      {/* Prize Carousel Selector Ribbon */}
-      <div className="w-full max-w-6xl mx-auto mb-8 bg-slate-950/70 p-2 sm:p-3 rounded-2xl border border-slate-800 backdrop-blur-md">
-        <div className="flex items-center justify-between gap-2">
+      {/* Prize Carousel Selector Ribbon & Mode Switcher */}
+      <div className="w-full max-w-6xl mx-auto mb-6 bg-slate-950/80 p-2 sm:p-3 rounded-2xl border border-slate-800 backdrop-blur-md flex flex-col md:flex-row items-center justify-between gap-3">
+        {/* Navigation & Dropdown */}
+        <div className="flex items-center justify-between gap-2 w-full md:w-auto flex-1">
           {/* Previous button */}
           <button
             onClick={handlePrevPrize}
@@ -125,17 +139,20 @@ export const StageView: React.FC<StageViewProps> = ({
             <ChevronLeft className="w-5 h-5" />
           </button>
 
-          {/* Quick Prize Selector Dropdown & Indicator */}
-          <div className="flex-1 flex items-center justify-center gap-2 overflow-x-auto no-scrollbar px-2">
+          {/* Quick Prize Selector Dropdown */}
+          <div className="flex-1 flex items-center justify-center gap-2 px-2">
             <select
               value={selectedPrizeIndex}
-              onChange={(e) => setSelectedPrizeIndex(Number(e.target.value))}
-              className="bg-slate-900 text-yellow-300 font-bold text-sm sm:text-base px-4 py-2 rounded-xl border border-yellow-500/30 focus:outline-none focus:ring-2 focus:ring-yellow-400 max-w-md w-full truncate cursor-pointer"
+              onChange={(e) => {
+                setSelectedPrizeIndex(Number(e.target.value));
+                setModeOverride('auto');
+              }}
+              className="bg-slate-900 text-yellow-300 font-bold text-xs sm:text-sm px-3 sm:px-4 py-2 rounded-xl border border-yellow-500/30 focus:outline-none focus:ring-2 focus:ring-yellow-400 w-full max-w-lg truncate cursor-pointer"
             >
               {sortedPrizes.map((p, idx) => (
                 <option key={p.id} value={idx} className="bg-slate-950 text-white">
                   {p.is_drawn ? '✓ ' : '○ '}
-                  #{p.rank_order} - {p.name} ({p.draw_type === 'batch' ? `Batch ${p.batch_size}` : 'Single'})
+                  #{p.rank_order} - {p.name} ({p.draw_type === 'batch' ? `Pukal ${p.batch_size}` : '1-by-1'})
                 </option>
               ))}
             </select>
@@ -151,14 +168,44 @@ export const StageView: React.FC<StageViewProps> = ({
             <ChevronRight className="w-5 h-5" />
           </button>
         </div>
+
+        {/* Live Mode Toggle Pill: Allows host to switch between Single and Batch on the fly! */}
+        <div className="flex items-center gap-1 bg-slate-900 p-1 rounded-xl border border-slate-750 text-xs w-full md:w-auto justify-center">
+          <span className="text-[11px] font-semibold text-slate-400 px-2 flex items-center gap-1">
+            <Sliders className="w-3.5 h-3.5 text-yellow-400" /> Mod:
+          </span>
+          <button
+            onClick={() => setModeOverride('single')}
+            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg font-bold transition-all ${
+              activeDrawType === 'single'
+                ? 'bg-yellow-500 text-slate-950 shadow'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <User className="w-3.5 h-3.5" />
+            <span>1-demi-1</span>
+          </button>
+
+          <button
+            onClick={() => setModeOverride('batch')}
+            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg font-bold transition-all ${
+              activeDrawType === 'batch'
+                ? 'bg-yellow-500 text-slate-950 shadow'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>Pukal (Batch)</span>
+          </button>
+        </div>
       </div>
 
-      {/* Main Drawing Area: Switches between Batch and Single according to current prize */}
+      {/* Main Drawing Area: Switches between Batch and Single according to activeDrawType */}
       <main className="flex-1 w-full max-w-6xl mx-auto flex items-center justify-center">
         {currentPrize ? (
-          currentPrize.draw_type === 'batch' ? (
+          activeDrawType === 'batch' ? (
             <BatchDraw
-              key={currentPrize.id}
+              key={`${currentPrize.id}-batch`}
               prize={currentPrize}
               eligibleParticipants={eligibleParticipants}
               allParticipants={participants}
@@ -166,7 +213,7 @@ export const StageView: React.FC<StageViewProps> = ({
             />
           ) : (
             <SingleDraw
-              key={currentPrize.id}
+              key={`${currentPrize.id}-single`}
               prize={currentPrize}
               eligibleParticipants={eligibleParticipants}
               allParticipants={participants}
@@ -187,13 +234,13 @@ export const StageView: React.FC<StageViewProps> = ({
       </main>
 
       {/* Stage Footer: Shortcuts and hints */}
-      <footer className="w-full max-w-6xl mx-auto mt-8 pt-4 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-400">
+      <footer className="w-full max-w-6xl mx-auto mt-6 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-400">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           <span>Sistem Rawak Kriptografik (Adil & Tanpa Ulangan)</span>
         </div>
         <div className="flex items-center gap-4">
-          <span>Mod Semasa: <strong className="text-yellow-400">{currentPrize?.draw_type === 'batch' ? `Pukal (${currentPrize.batch_size} Nama)` : 'Individu (1 Nama)'}</strong></span>
+          <span>Mod Semasa: <strong className="text-yellow-400">{activeDrawType === 'batch' ? 'Pukal (Boleh Laraskan Bilangan)' : 'Individu (1-demi-1)'}</strong></span>
           <span>Tekan F11 untuk Projector Fullscreen</span>
         </div>
       </footer>

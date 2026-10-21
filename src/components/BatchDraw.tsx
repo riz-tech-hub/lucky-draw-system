@@ -13,7 +13,9 @@ import {
   Sparkles,
   UserCheck,
   RotateCcw,
-  Volume2
+  Sliders,
+  Plus,
+  Minus
 } from 'lucide-react';
 
 interface BatchDrawProps {
@@ -30,7 +32,8 @@ export const BatchDraw: React.FC<BatchDrawProps> = ({
   allParticipants,
   onConfirmWinners,
 }) => {
-  const batchCount = prize.batch_size || 10;
+  // Configurable batch count (defaults to prize.batch_size or 10)
+  const [batchCount, setBatchCount] = useState<number>(prize.batch_size || 10);
   const [isSpinning, setIsSpinning] = useState(false);
   const [pendingWinners, setPendingWinners] = useState<Participant[]>([]);
   const [rollingDisplay, setRollingDisplay] = useState<Participant[]>([]);
@@ -48,14 +51,24 @@ export const BatchDraw: React.FC<BatchDrawProps> = ({
     };
   }, []);
 
-  // Update confirmed state if prize changes
+  // Update confirmed state and batch count if prize changes
   useEffect(() => {
     setIsConfirmed(prize.is_drawn);
+    setBatchCount(prize.batch_size || 10);
     if (!prize.is_drawn) {
       setPendingWinners([]);
       setRevealedCount(0);
     }
-  }, [prize.id, prize.is_drawn]);
+  }, [prize.id, prize.is_drawn, prize.batch_size]);
+
+  // Adjust batch count helper
+  const handleSetBatchCount = (count: number) => {
+    if (isSpinning || saving || isConfirmed) return;
+    const sanitized = Math.max(1, Math.min(count, eligibleParticipants.length || 50));
+    setBatchCount(sanitized);
+    setPendingWinners([]);
+    setRevealedCount(0);
+  };
 
   // Handle Start Batch Spin
   const handleStartDraw = () => {
@@ -86,7 +99,7 @@ export const BatchDraw: React.FC<BatchDrawProps> = ({
       ticks++;
       sound.playTick(1.0 + (ticks % 5) * 0.1);
 
-      // Random mock display for the 10 slots
+      // Random mock display for the active batch slots
       const fakeSlots: Participant[] = [];
       for (let i = 0; i < targetCount; i++) {
         const randIndex = Math.floor(Math.random() * samplePool.length);
@@ -95,7 +108,7 @@ export const BatchDraw: React.FC<BatchDrawProps> = ({
       setRollingDisplay(fakeSlots);
     }, 70);
 
-    // Stop fast shuffle after 2.5 seconds and trigger cascading lock-in
+    // Stop fast shuffle after 2.4 seconds and trigger cascading lock-in
     setTimeout(() => {
       if (rollIntervalRef.current) clearInterval(rollIntervalRef.current);
       sound.stopSpinLoop();
@@ -113,7 +126,7 @@ export const BatchDraw: React.FC<BatchDrawProps> = ({
           fireConfettiBatch();
           sound.playFanfare();
         }
-      }, 160);
+      }, 150);
     }, 2400);
   };
 
@@ -155,19 +168,19 @@ export const BatchDraw: React.FC<BatchDrawProps> = ({
 
   return (
     <div className="w-full flex flex-col items-center">
-      {/* Top Banner: Prize Info & Eligible Count */}
-      <div className="w-full max-w-5xl mb-6 flex flex-wrap items-center justify-between gap-4 p-4 rounded-2xl glass-panel-gold border border-yellow-500/40 shadow-xl shadow-yellow-500/10">
-        <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-yellow-600 flex items-center justify-center text-slate-950 font-black shadow-lg">
+      {/* Top Banner: Prize Info, Dynamic Batch Count Control & Eligible Count */}
+      <div className="w-full max-w-5xl mb-6 flex flex-col md:flex-row items-center justify-between gap-4 p-4 rounded-2xl glass-panel-gold border border-yellow-500/40 shadow-xl shadow-yellow-500/10">
+        <div className="flex items-center gap-3.5 w-full md:w-auto">
+          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-400 to-yellow-600 flex items-center justify-center text-slate-950 font-black shadow-lg flex-shrink-0">
             <Trophy className="w-6 h-6" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-bold uppercase tracking-wider text-yellow-400">
                 {prize.category} • Urutan #{prize.rank_order}
               </span>
               <span className="px-2 py-0.5 text-[11px] font-bold uppercase rounded-full bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">
-                Cabutan Pukal ({batchCount} Serentak)
+                Cabutan Pukal ({batchCount} Pemenang)
               </span>
               {isConfirmed && (
                 <span className="flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
@@ -181,17 +194,86 @@ export const BatchDraw: React.FC<BatchDrawProps> = ({
           </div>
         </div>
 
-        {/* Participant counter badge */}
-        <div className="flex items-center gap-2 bg-slate-900/80 px-4 py-2 rounded-xl border border-slate-700/60">
-          <UserCheck className="w-4 h-4 text-emerald-400" />
-          <span className="text-xs text-slate-300">
-            Peserta Layak: <strong className="text-emerald-400 text-sm">{eligibleParticipants.length}</strong> orang
-          </span>
+        {/* Dynamic Draw Count Controls */}
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+          {/* Batch Size Stepper & Quick Pills */}
+          {!isSpinning && !isConfirmed && pendingWinners.length === 0 && (
+            <div className="flex items-center gap-2 bg-slate-900/90 p-1.5 rounded-xl border border-yellow-500/30">
+              <span className="text-xs text-amber-200/80 font-bold px-1.5 flex items-center gap-1">
+                <Sliders className="w-3.5 h-3.5 text-yellow-400" />
+                <span>Sekali Klik:</span>
+              </span>
+
+              {/* Stepper buttons */}
+              <div className="flex items-center bg-slate-950 rounded-lg border border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => handleSetBatchCount(batchCount - 1)}
+                  disabled={batchCount <= 1}
+                  className="p-1.5 hover:bg-slate-800 disabled:opacity-30 text-yellow-400 transition-colors"
+                  title="Kurang 1"
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                </button>
+                <input
+                  type="number"
+                  min={1}
+                  max={Math.max(1, eligibleParticipants.length)}
+                  value={batchCount}
+                  onChange={(e) => handleSetBatchCount(parseInt(e.target.value) || 1)}
+                  className="w-12 text-center bg-transparent text-yellow-300 font-black text-xs sm:text-sm focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleSetBatchCount(batchCount + 1)}
+                  disabled={batchCount >= eligibleParticipants.length}
+                  className="p-1.5 hover:bg-slate-800 disabled:opacity-30 text-yellow-400 transition-colors"
+                  title="Tambah 1"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Quick Pills */}
+              <div className="hidden sm:flex items-center gap-1">
+                {[5, 10, 15, 20].map((num) => (
+                  <button
+                    key={num}
+                    type="button"
+                    onClick={() => handleSetBatchCount(num)}
+                    className={`px-2 py-1 rounded text-[11px] font-bold transition-all ${
+                      batchCount === num
+                        ? 'bg-yellow-500 text-slate-950'
+                        : 'bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700'
+                    }`}
+                  >
+                    {num}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Participant counter badge */}
+          <div className="flex items-center gap-2 bg-slate-900/80 px-3.5 py-2 rounded-xl border border-slate-700/60">
+            <UserCheck className="w-4 h-4 text-emerald-400" />
+            <span className="text-xs text-slate-300">
+              Layak: <strong className="text-emerald-400 text-sm">{eligibleParticipants.length}</strong>
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* Grid of 10 Cards */}
-      <div className="w-full max-w-6xl grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5 mb-8">
+      {/* Grid of Dynamic Batch Cards */}
+      <div className={`w-full max-w-6xl grid gap-3.5 mb-8 ${
+        batchCount <= 4
+          ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4'
+          : batchCount <= 6
+          ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3'
+          : batchCount <= 10
+          ? 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5'
+          : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5'
+      }`}>
         {Array.from({ length: batchCount }).map((_, index) => {
           const participant = currentDisplay[index];
           const isSlotRevealed = !isSpinning && index < revealedCount;
@@ -280,7 +362,7 @@ export const BatchDraw: React.FC<BatchDrawProps> = ({
               className="flex-1 min-w-[240px] px-8 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-green-600 text-white font-bold text-base shadow-lg shadow-emerald-500/30 hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-2"
             >
               <CheckCircle2 className="w-5 h-5" />
-              <span>{saving ? 'Sedang Menyimpan...' : 'SAHKAN & SIMPAN 10 PEMENANG'}</span>
+              <span>{saving ? 'Sedang Menyimpan...' : `SAHKAN & SIMPAN ${pendingWinners.length} PEMENANG`}</span>
             </button>
 
             <button
