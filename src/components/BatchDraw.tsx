@@ -24,6 +24,7 @@ interface BatchDrawProps {
   allParticipants: Participant[];
   onConfirmWinners: (prize: Prize, selectedParticipants: Participant[]) => Promise<void>;
   onDrawNextPrize?: () => void;
+  participantMode?: 'both' | 'name_only' | 'ticket_only';
 }
 
 export const BatchDraw: React.FC<BatchDrawProps> = ({
@@ -31,6 +32,7 @@ export const BatchDraw: React.FC<BatchDrawProps> = ({
   eligibleParticipants,
   allParticipants,
   onConfirmWinners,
+  participantMode = 'both',
 }) => {
   // Configurable batch count (defaults to prize.batch_size or 10)
   const [batchCount, setBatchCount] = useState<number>(prize.batch_size || 10);
@@ -311,15 +313,37 @@ export const BatchDraw: React.FC<BatchDrawProps> = ({
               {/* Participant Content */}
               {participant && (isSlotRevealed || isSlotCurrentlyRolling) ? (
                 <div className="my-auto text-center">
-                  <div className="font-mono text-xs font-black tracking-widest text-amber-300 mb-0.5">
-                    {participant.ticket_number}
-                  </div>
-                  <h4 className="font-extrabold text-sm text-white line-clamp-2 leading-tight">
-                    {participant.name}
-                  </h4>
-                  <div className="text-[11px] text-slate-400 mt-1 truncate">
-                    {participant.department || 'Peserta'}
-                  </div>
+                  {participantMode === 'name_only' ? (
+                    <h4 className="font-extrabold text-sm sm:text-base text-white line-clamp-2 leading-tight">
+                      {participant.name}
+                    </h4>
+                  ) : participantMode === 'ticket_only' ? (
+                    <div>
+                      <div className="font-mono text-base font-black tracking-widest text-amber-300">
+                        {participant.ticket_number}
+                      </div>
+                      {participant.name && participant.name !== participant.ticket_number && (
+                        <h4 className="font-medium text-xs text-slate-300 truncate mt-0.5">
+                          {participant.name}
+                        </h4>
+                      )}
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="font-mono text-xs font-black tracking-widest text-amber-300 mb-0.5">
+                        {participant.ticket_number}
+                      </div>
+                      <h4 className="font-extrabold text-sm text-white line-clamp-2 leading-tight">
+                        {participant.name}
+                      </h4>
+                    </div>
+                  )}
+
+                  {participant.department && (
+                    <div className="text-[11px] text-slate-400 mt-1 truncate">
+                      {participant.department}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="my-auto text-center text-slate-600">

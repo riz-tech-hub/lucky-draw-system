@@ -27,6 +27,7 @@ export const INITIAL_EVENT: EventItem = {
   logo_url: '',
   primary_color: '#EAB308',
   theme_preset: 'gold',
+  participant_mode: 'both',
   created_at: new Date().toISOString(),
 };
 
@@ -128,16 +129,21 @@ export const DataStore = {
       try {
         const { data, error } = await supabase.from('events').select('*').order('created_at', { ascending: false });
         if (!error && data && data.length > 0) {
+          const hydrated = (data as EventItem[]).map((ev) => {
+            const m = typeof window !== 'undefined' ? (localStorage.getItem(`lucky_draw_part_mode_${ev.id}`) as any) : null;
+            return { ...ev, participant_mode: m || ev.participant_mode || 'both' };
+          });
           if (typeof window !== 'undefined') {
-            localStorage.setItem(LS_KEYS.EVENTS, JSON.stringify(data));
+            localStorage.setItem(LS_KEYS.EVENTS, JSON.stringify(hydrated));
           }
-          return data as EventItem[];
+          return hydrated;
         }
         // If Supabase table is completely empty, insert initial event
         if (!error && data && data.length === 0) {
-          const { data: inserted } = await supabase.from('events').insert(INITIAL_EVENT).select();
+          const { participant_mode, ...initData } = INITIAL_EVENT;
+          const { data: inserted } = await supabase.from('events').insert(initData).select();
           if (inserted && inserted.length > 0) {
-            return inserted as EventItem[];
+            return inserted.map((ev) => ({ ...ev, participant_mode: 'both' })) as EventItem[];
           }
         }
       } catch (err) {
@@ -153,7 +159,13 @@ export const DataStore = {
     }
     try {
       const parsed = JSON.parse(stored);
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : [INITIAL_EVENT];
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((ev: EventItem) => {
+          const m = typeof window !== 'undefined' ? (localStorage.getItem(`lucky_draw_part_mode_${ev.id}`) as any) : null;
+          return { ...ev, participant_mode: m || ev.participant_mode || 'both' };
+        });
+      }
+      return [INITIAL_EVENT];
     } catch {
       return [INITIAL_EVENT];
     }
@@ -176,11 +188,16 @@ export const DataStore = {
   },
 
   async saveEvent(event: EventItem): Promise<EventItem> {
+    if (typeof window !== 'undefined' && event.participant_mode) {
+      localStorage.setItem(`lucky_draw_part_mode_${event.id}`, event.participant_mode);
+    }
+
     if (isSupabaseConfigured() && supabase) {
       try {
-        const { data, error } = await supabase.from('events').upsert(event).select().single();
+        const { participant_mode, ...supabaseEvent } = event;
+        const { data, error } = await supabase.from('events').upsert(supabaseEvent).select().single();
         if (!error && data) {
-          event = data as EventItem;
+          event = { ...event, ...(data as EventItem), participant_mode: event.participant_mode || 'both' };
         }
       } catch (err) {
         console.error('Supabase saveEvent error:', err);

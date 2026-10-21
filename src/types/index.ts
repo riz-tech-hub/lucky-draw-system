@@ -1,4 +1,5 @@
 export type ThemePreset = 'gold' | 'emerald' | 'royal_blue' | 'neon_purple' | 'crimson';
+export type ParticipantMode = 'both' | 'name_only' | 'ticket_only';
 
 export interface EventItem {
   id: string;
@@ -9,6 +10,7 @@ export interface EventItem {
   logo_url?: string;
   primary_color: string;
   theme_preset: ThemePreset;
+  participant_mode?: ParticipantMode;
   created_at?: string;
 }
 

@@ -13,7 +13,8 @@ import {
   RotateCcw,
   UserCheck,
   AlertTriangle,
-  Gift
+  Gift,
+  User
 } from 'lucide-react';
 
 interface SingleDrawProps {
@@ -21,6 +22,7 @@ interface SingleDrawProps {
   eligibleParticipants: Participant[];
   allParticipants: Participant[];
   onConfirmWinner: (prize: Prize, winner: Participant) => Promise<void>;
+  participantMode?: 'both' | 'name_only' | 'ticket_only';
 }
 
 export const SingleDraw: React.FC<SingleDrawProps> = ({
@@ -28,6 +30,7 @@ export const SingleDraw: React.FC<SingleDrawProps> = ({
   eligibleParticipants,
   allParticipants,
   onConfirmWinner,
+  participantMode = 'both',
 }) => {
   const [isSpinning, setIsSpinning] = useState(false);
   const [selectedWinner, setSelectedWinner] = useState<Participant | null>(null);
@@ -172,32 +175,67 @@ export const SingleDraw: React.FC<SingleDrawProps> = ({
         {/* Display Container */}
         {currentPerson ? (
           <div className="text-center z-10 space-y-4">
-            {/* Ticket Badge */}
-            <div className="inline-block px-6 py-2 rounded-2xl bg-amber-500/20 border-2 border-amber-400/80 shadow-lg shadow-amber-500/20">
-              <span className="font-mono text-xl sm:text-2xl md:text-3xl font-black tracking-widest text-yellow-300">
-                {currentPerson.ticket_number}
-              </span>
-            </div>
+            {participantMode === 'name_only' ? (
+              <>
+                <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-500/20 border border-amber-400/60 flex items-center justify-center text-yellow-300 shadow-lg shadow-amber-500/20">
+                  <User className="w-8 h-8" />
+                </div>
+                <h3 className={`font-black text-4xl sm:text-5xl md:text-6xl text-white tracking-tight leading-tight max-w-2xl mx-auto ${
+                  isSpinning ? 'blur-[1px] opacity-80' : 'drop-shadow-lg scale-100'
+                }`}>
+                  {currentPerson.name}
+                </h3>
+              </>
+            ) : participantMode === 'ticket_only' ? (
+              <>
+                <div className="text-xs uppercase tracking-widest text-amber-300 font-bold">
+                  NO. TIKET / NO. MATRIK
+                </div>
+                <div className="inline-block px-8 py-4 sm:px-12 sm:py-6 rounded-3xl bg-amber-500/20 border-4 border-amber-400 shadow-2xl shadow-amber-500/30">
+                  <span className="font-mono text-4xl sm:text-6xl md:text-7xl font-black tracking-widest text-yellow-300 drop-shadow-md">
+                    {currentPerson.ticket_number}
+                  </span>
+                </div>
+                {currentPerson.name && currentPerson.name !== currentPerson.ticket_number && (
+                  <h3 className="font-bold text-xl sm:text-2xl text-slate-200 mt-2">
+                    {currentPerson.name}
+                  </h3>
+                )}
+              </>
+            ) : (
+              <>
+                {/* Both Mode: Ticket on top, Name in middle */}
+                <div className="inline-block px-6 py-2 rounded-2xl bg-amber-500/20 border-2 border-amber-400/80 shadow-lg shadow-amber-500/20">
+                  <span className="font-mono text-xl sm:text-2xl md:text-3xl font-black tracking-widest text-yellow-300">
+                    {currentPerson.ticket_number}
+                  </span>
+                </div>
+                <h3 className={`font-black text-3xl sm:text-4xl md:text-5xl text-white tracking-tight leading-tight max-w-2xl mx-auto ${
+                  isSpinning ? 'blur-[1px] opacity-80' : 'drop-shadow-lg scale-100'
+                }`}>
+                  {currentPerson.name}
+                </h3>
+              </>
+            )}
 
-            {/* Winner Full Name */}
-            <h3 className={`font-black text-3xl sm:text-4xl md:text-5xl text-white tracking-tight leading-tight max-w-2xl mx-auto ${
-              isSpinning ? 'blur-[1px] opacity-80' : 'drop-shadow-lg scale-100'
-            }`}>
-              {currentPerson.name}
-            </h3>
-
-            {/* Department Badge */}
-            <div className="text-sm sm:text-base font-semibold text-amber-200/80 bg-slate-900/90 px-4 py-1.5 rounded-full inline-block border border-slate-700">
-              {currentPerson.department || 'Peserta Bertuah'}
-            </div>
+            {/* Department Badge (Only if provided!) */}
+            {currentPerson.department && (
+              <div className="text-sm sm:text-base font-semibold text-amber-200/80 bg-slate-900/90 px-4 py-1.5 rounded-full inline-block border border-slate-700">
+                {currentPerson.department}
+              </div>
+            )}
           </div>
         ) : (
           <div className="text-center py-8 z-10 space-y-3">
             <div className="w-24 h-24 mx-auto rounded-3xl bg-slate-900/90 border border-yellow-500/30 flex items-center justify-center text-yellow-400 shadow-xl">
-              <Gift className="w-12 h-12 animate-pulse" />
+              {participantMode === 'name_only' ? (
+                <User className="w-12 h-12 animate-pulse" />
+              ) : (
+                <Gift className="w-12 h-12 animate-pulse" />
+              )}
             </div>
             <div className="font-mono text-3xl sm:text-4xl font-black text-slate-600 tracking-widest">
-              TK-????
+              {participantMode === 'name_only' ? '[Nama Pemenang]' : participantMode === 'ticket_only' ? '??????' : 'TK-????'}
             </div>
             <p className="text-sm font-semibold text-slate-400">
               Tekan butang di bawah untuk memulakan cabutan 1-demi-1

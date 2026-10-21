@@ -210,6 +210,7 @@ export const StageView: React.FC<StageViewProps> = ({
               eligibleParticipants={eligibleParticipants}
               allParticipants={participants}
               onConfirmWinners={onConfirmWinners}
+              participantMode={activeEvent.participant_mode || 'both'}
             />
           ) : (
             <SingleDraw
@@ -220,6 +221,7 @@ export const StageView: React.FC<StageViewProps> = ({
               onConfirmWinner={async (prz, winner) => {
                 await onConfirmWinners(prz, [winner]);
               }}
+              participantMode={activeEvent.participant_mode || 'both'}
             />
           )
         ) : (

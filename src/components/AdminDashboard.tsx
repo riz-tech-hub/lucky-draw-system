@@ -125,6 +125,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const file = e.target.files?.[0];
     if (!file) return;
 
+    const currentMode = activeEvent.participant_mode || 'both';
+
     const reader = new FileReader();
     reader.onload = async (evt) => {
       const text = evt.target?.result as string;
@@ -134,48 +136,126 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       if (lines.length < 1) return;
 
       const newItems: Omit<Participant, 'id' | 'is_winner' | 'created_at'>[] = [];
-      // Check if first row is header
-      const startIndex = lines[0].toLowerCase().includes('nama') || lines[0].toLowerCase().includes('name') ? 1 : 0;
+      const firstLineLower = lines[0].toLowerCase();
+      const hasHeader =
+        firstLineLower.includes('nama') ||
+        firstLineLower.includes('name') ||
+        firstLineLower.includes('tiket') ||
+        firstLineLower.includes('ticket') ||
+        firstLineLower.includes('matrik') ||
+        firstLineLower.includes('matric') ||
+        firstLineLower.includes('no');
+
+      const startIndex = hasHeader ? 1 : 0;
+      let startTicketNum = participants.length + 1;
 
       for (let i = startIndex; i < lines.length; i++) {
-        // Support comma or tab separated
-        const cols = lines[i].split(/[,\t]/).map((c) => c.replace(/^["']|["']$/g, '').trim());
-        if (cols.length >= 2) {
-          // Format: Nama, No Tiket, Jabatan (optional)
-          const name = cols[0];
-          const ticket = cols[1];
-          const dept = cols[2] || 'Umum';
+        const rawLine = lines[i].trim();
+        if (!rawLine) continue;
 
-          if (name && ticket) {
-            newItems.push({
-              event_id: activeEvent.id,
-              name,
-              ticket_number: ticket,
-              department: dept,
-            });
+        // Support comma or tab separated
+        const cols = rawLine.split(/[,\t]/).map((c) => c.replace(/^["']|["']$/g, '').trim());
+
+        let name = '';
+        let ticket = '';
+        let dept = '';
+
+        if (currentMode === 'name_only') {
+          // If only 1 col: Nama
+          // If 2 cols: Nama, Jabatan
+          // If 3 cols: Nama, No Tiket, Jabatan
+          name = cols[0] || '';
+          if (cols.length === 2) {
+            dept = cols[1] || '';
+          } else if (cols.length >= 3) {
+            ticket = cols[1] || '';
+            dept = cols[2] || '';
+          }
+
+          if (!name) {
+            alert(`Ralat pada Baris ${i + 1}: Nama tidak dijumpai. Dalam mod "Nama Sahaja", semua peserta WAJIB mempunyai Nama Penuh!`);
+            e.target.value = '';
+            return;
+          }
+
+          if (!ticket) {
+            ticket = `TK-${String(startTicketNum++).padStart(4, '0')}`;
+          }
+        } else if (currentMode === 'ticket_only') {
+          // If only 1 col: No Tiket/Matrik
+          // If 2 cols: No Tiket, Jabatan
+          // If 3 cols: No Tiket, Nama, Jabatan
+          ticket = cols[0] || '';
+          if (cols.length === 2) {
+            dept = cols[1] || '';
+          } else if (cols.length >= 3) {
+            name = cols[1] || '';
+            dept = cols[2] || '';
+          }
+
+          if (!ticket) {
+            alert(`Ralat pada Baris ${i + 1}: No. Tiket / Matrik tidak dijumpai. Dalam mod "No. Tiket / Matrik Sahaja", semua peserta WAJIB mempunyai No. Tiket / Matrik!`);
+            e.target.value = '';
+            return;
+          }
+
+          if (!name) {
+            name = ticket;
+          }
+        } else {
+          // Mode 'both'
+          if (cols.length === 1) {
+            alert(`Ralat pada Baris ${i + 1}: Format tidak lengkap. Dalam mod "Nama & No. Tiket", kedua-duanya wajib diisi!`);
+            e.target.value = '';
+            return;
+          }
+          name = cols[0] || '';
+          ticket = cols[1] || '';
+          dept = cols[2] || '';
+
+          if (!name || !ticket) {
+            alert(`Ralat pada Baris ${i + 1}: Sila pastikan kedua-dua Nama dan No. Tiket diisi! (Jabatan/Bahagian adalah pilihan).`);
+            e.target.value = '';
+            return;
           }
         }
+
+        newItems.push({
+          event_id: activeEvent.id,
+          name,
+          ticket_number: ticket,
+          department: dept, // Bahagian adalah pilihan!
+        });
       }
 
       if (newItems.length > 0) {
         await onImportParticipants(newItems);
         alert(`Berjaya import ${newItems.length} peserta baharu!`);
       } else {
-        alert('Format CSV tidak sah. Sila pastikan format: Nama, No Tiket, Jabatan');
+        alert('Format CSV tidak sah atau tiada data.');
       }
       e.target.value = '';
     };
     reader.readAsText(file);
   };
 
-  // Download Sample CSV
+  // Download Sample CSV according to current participant mode
   const handleDownloadSampleCSV = () => {
-    const sample = 'Nama,No Tiket,Jabatan\nAhmad Ridzuan,TK-2001,Teknologi Maklumat\nSiti Nurhaliza,TK-2002,Sumber Manusia\nTan Wei Liang,TK-2003,Kewangan\nPravin Kumar,TK-2004,Operasi';
+    const currentMode = activeEvent.participant_mode || 'both';
+    let sample = '';
+    if (currentMode === 'name_only') {
+      sample = 'Nama,Jabatan\nAhmad Ridzuan bin Ismail,Teknologi Maklumat\nSiti Nurhaliza binti Ramli,Sumber Manusia\nTan Wei Liang,\nPravin Kumar a/l Raman,';
+    } else if (currentMode === 'ticket_only') {
+      sample = 'No Tiket / Matrik,Jabatan\nTK-2001,Teknologi Maklumat\nTK-2002,Sumber Manusia\nA198273,\nKUPON-088,';
+    } else {
+      sample = 'Nama,No Tiket,Jabatan\nAhmad Ridzuan bin Ismail,TK-2001,Teknologi Maklumat\nSiti Nurhaliza binti Ramli,TK-2002,Sumber Manusia\nTan Wei Liang,TK-2003,\nPravin Kumar a/l Raman,TK-2004,';
+    }
+
     const blob = new Blob([sample], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'contoh_peserta_cabutan.csv';
+    link.download = `contoh_peserta_${currentMode}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -183,15 +263,39 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Handle Add Participant Manually
   const handleAddSinglePart = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newPartName || !newPartTicket) {
-      alert('Sila masukkan Nama dan No. Tiket peserta.');
-      return;
+    const currentMode = activeEvent.participant_mode || 'both';
+    let name = newPartName.trim();
+    let ticket = newPartTicket.trim();
+    const dept = newPartDept.trim();
+
+    if (currentMode === 'name_only') {
+      if (!name) {
+        alert('Sila masukkan Nama Penuh peserta (Wajib).');
+        return;
+      }
+      if (!ticket) {
+        ticket = `TK-${String(participants.length + 1).padStart(4, '0')}`;
+      }
+    } else if (currentMode === 'ticket_only') {
+      if (!ticket) {
+        alert('Sila masukkan No. Tiket / No. Matrik peserta (Wajib).');
+        return;
+      }
+      if (!name) {
+        name = ticket;
+      }
+    } else {
+      if (!name || !ticket) {
+        alert('Sila masukkan kedua-dua Nama dan No. Tiket peserta (Wajib).');
+        return;
+      }
     }
+
     await onAddParticipant({
       event_id: activeEvent.id,
-      name: newPartName,
-      ticket_number: newPartTicket,
-      department: newPartDept || 'Umum',
+      name,
+      ticket_number: ticket,
+      department: dept,
     });
     setNewPartName('');
     setNewPartTicket('');
@@ -290,7 +394,67 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* TAB 1: PENGURUSAN PESERTA                                                  */}
       {/* ========================================================================= */}
       {activeTab === 'participants' && (
-        <div className="space-y-8">
+        <div className="space-y-6">
+          {/* Format Pengecam Peserta (Dynamic Participant Identifier Mode) */}
+          <div className="p-4 sm:p-5 rounded-2xl bg-slate-900/90 border border-yellow-500/30 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-lg shadow-black/20">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-yellow-400 font-bold text-sm">Mod Format Pengenalan Peserta:</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">
+                  Dinamik
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                Tentukan format wajib untuk majlis ini. Kolum <strong>Jabatan/Bahagian sentiasa pilihan (tidak wajib)</strong>.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5 bg-slate-950 p-1.5 rounded-xl border border-slate-800 text-xs">
+              <button
+                type="button"
+                onClick={async () => {
+                  const updated = { ...activeEvent, participant_mode: 'both' as const };
+                  await onSaveEvent(updated);
+                }}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                  (activeEvent.participant_mode || 'both') === 'both'
+                    ? 'bg-yellow-500 text-slate-950 shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Nama & No. Tiket
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const updated = { ...activeEvent, participant_mode: 'name_only' as const };
+                  await onSaveEvent(updated);
+                }}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                  activeEvent.participant_mode === 'name_only'
+                    ? 'bg-yellow-500 text-slate-950 shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Nama Sahaja (Wajib Nama)
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const updated = { ...activeEvent, participant_mode: 'ticket_only' as const };
+                  await onSaveEvent(updated);
+                }}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all ${
+                  activeEvent.participant_mode === 'ticket_only'
+                    ? 'bg-yellow-500 text-slate-950 shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                No. Tiket / Matrik (Wajib Tiket)
+              </button>
+            </div>
+          </div>
+
           {/* Top action cards: CSV Import & Add Single */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* CSV / Excel Importer Card */}
@@ -309,7 +473,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   </button>
                 </div>
                 <p className="text-xs text-slate-400 mb-4">
-                  Muat naik fail CSV dengan susunan kolum: <code>Nama, No Tiket, Jabatan</code>
+                  {activeEvent.participant_mode === 'name_only'
+                    ? 'Format CSV: Kolum 1 WAJIB Nama. (Jabatan/Bahagian adalah pilihan).'
+                    : activeEvent.participant_mode === 'ticket_only'
+                    ? 'Format CSV: Kolum 1 WAJIB No. Tiket/Matrik. (Jabatan/Bahagian adalah pilihan).'
+                    : 'Format CSV: Kolum 1 Nama, Kolum 2 No Tiket (Kedua-dua wajib), Kolum 3 Jabatan (Pilihan).'}
                 </p>
               </div>
 
@@ -334,7 +502,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </h3>
               <form onSubmit={handleAddSinglePart} className="space-y-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">Nama Penuh</label>
+                  <label className="block text-xs font-semibold text-slate-400 mb-1">
+                    Nama Penuh {activeEvent.participant_mode === 'ticket_only' ? <span className="text-slate-500">(Pilihan)</span> : <span className="text-yellow-400 font-bold">* (Wajib)</span>}
+                  </label>
                   <input
                     type="text"
                     placeholder="Contoh: Muhammad Ammar bin Roslan"
@@ -345,17 +515,21 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1">No. Tiket / Matrik</label>
+                    <label className="block text-xs font-semibold text-slate-400 mb-1">
+                      No. Tiket / Matrik {activeEvent.participant_mode === 'name_only' ? <span className="text-slate-500">(Pilihan)</span> : <span className="text-yellow-400 font-bold">* (Wajib)</span>}
+                    </label>
                     <input
                       type="text"
-                      placeholder="Contoh: TK-1099"
+                      placeholder="Contoh: TK-1099 atau A198273"
                       value={newPartTicket}
                       onChange={(e) => setNewPartTicket(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-yellow-400"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1">Jabatan / Bahagian</label>
+                    <label className="block text-xs font-semibold text-slate-400 mb-1">
+                      Jabatan / Bahagian <span className="text-slate-500">(Pilihan / Tidak Wajib)</span>
+                    </label>
                     <input
                       type="text"
                       placeholder="Contoh: Kewangan"
@@ -431,9 +605,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     filteredParts.map((p, idx) => (
                       <tr key={p.id} className="hover:bg-slate-900/40">
                         <td className="py-2.5 px-3 text-center text-slate-500 font-mono text-xs">{idx + 1}</td>
-                        <td className="py-2.5 px-3 font-mono font-bold text-yellow-400">{p.ticket_number}</td>
-                        <td className="py-2.5 px-3 font-semibold text-white">{p.name}</td>
-                        <td className="py-2.5 px-3 text-slate-400">{p.department}</td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-yellow-400">{p.ticket_number || '-'}</td>
+                        <td className="py-2.5 px-3 font-semibold text-white">{p.name || '-'}</td>
+                        <td className="py-2.5 px-3 text-slate-400">{p.department || '-'}</td>
                         <td className="py-2.5 px-3">
                           {p.is_winner ? (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
