@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { EventItem, Participant, Prize, Winner } from '@/types';
-import { DataStore, INITIAL_EVENT } from '@/lib/store';
+import { DataStore, INITIAL_EVENT, generateUUID } from '@/lib/store';
 import { Navbar } from '@/components/Navbar';
 import { StageView } from '@/components/StageView';
 import { WinnersView } from '@/components/WinnersView';
@@ -100,7 +100,7 @@ export default function LuckyDrawApp() {
   // Create New Event
   const handleCreateNewEvent = async (name: string, description: string) => {
     const newEv: EventItem = {
-      id: `event-${Date.now()}`,
+      id: generateUUID(),
       name,
       description,
       event_date: new Date().toISOString().split('T')[0],
@@ -109,8 +109,6 @@ export default function LuckyDrawApp() {
       bg_image_url: 'https://images.unsplash.com/photo-1519750157634-b6d493a0f77c?auto=format&fit=crop&w=1920&q=80',
     };
     await DataStore.saveEvent(newEv);
-    // Auto initialize 74 prizes for the new event
-    await DataStore.resetDefault74Prizes(newEv.id);
     await handleSelectEvent(newEv.id);
   };
 
@@ -118,9 +116,9 @@ export default function LuckyDrawApp() {
   const handleImportParticipants = async (
     newParts: Omit<Participant, 'id' | 'is_winner' | 'created_at'>[]
   ) => {
-    const formatted: Participant[] = newParts.map((p, idx) => ({
+    const formatted: Participant[] = newParts.map((p) => ({
       ...p,
-      id: `part-${Date.now()}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
+      id: generateUUID(),
       is_winner: false,
       created_at: new Date().toISOString(),
     }));
