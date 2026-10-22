@@ -19,7 +19,11 @@ import {
   Calendar,
   Layers,
   Sparkles,
-  Pencil
+  Pencil,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  ArrowDownUp
 } from 'lucide-react';
 
 interface AdminDashboardProps {
@@ -102,6 +106,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Participant search & filter
   const [partSearch, setPartSearch] = useState('');
   const [partStatusFilter, setPartStatusFilter] = useState<'all' | 'unwon' | 'won'>('all');
+
+  // Participant sorting state
+  const [partSortField, setPartSortField] = useState<'ticket' | 'name' | 'department' | 'status'>('ticket');
+  const [partSortDirection, setPartSortDirection] = useState<'asc' | 'desc'>('asc');
+
+  // Prize sorting state
+  const [prizeSortField, setPrizeSortField] = useState<'rank' | 'name' | 'category' | 'mode' | 'batch' | 'status'>('rank');
+  const [prizeSortDirection, setPrizeSortDirection] = useState<'asc' | 'desc'>('asc');
 
   // Edit Participant Modal state
   const [showEditPartModal, setShowEditPartModal] = useState(false);
@@ -374,7 +386,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  // Filtered Participants
+  // Filtered & Sorted Participants
   const filteredParts = participants.filter((p) => {
     const matchesSearch =
       p.name.toLowerCase().includes(partSearch.toLowerCase()) ||
@@ -388,6 +400,79 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     return matchesSearch && matchesStatus;
   });
+
+  const sortedParts = [...filteredParts].sort((a, b) => {
+    let result = 0;
+    if (partSortField === 'ticket') {
+      result = (a.ticket_number || '').localeCompare(b.ticket_number || '', undefined, { numeric: true, sensitivity: 'base' });
+    } else if (partSortField === 'name') {
+      result = (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' });
+    } else if (partSortField === 'department') {
+      result = (a.department || '').localeCompare(b.department || '', undefined, { numeric: true, sensitivity: 'base' });
+    } else if (partSortField === 'status') {
+      result = Number(a.is_winner) - Number(b.is_winner);
+    }
+    return partSortDirection === 'asc' ? result : -result;
+  });
+
+  const togglePartSort = (field: 'ticket' | 'name' | 'department' | 'status') => {
+    if (partSortField === field) {
+      setPartSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setPartSortField(field);
+      setPartSortDirection('asc');
+    }
+  };
+
+  const renderPartSortIndicator = (field: 'ticket' | 'name' | 'department' | 'status') => {
+    if (partSortField !== field) {
+      return <ArrowUpDown className="w-3 h-3 text-slate-600 inline ml-1 group-hover:text-slate-400 transition-colors" />;
+    }
+    return partSortDirection === 'asc' ? (
+      <ArrowUp className="w-3.5 h-3.5 text-yellow-400 inline ml-1" />
+    ) : (
+      <ArrowDown className="w-3.5 h-3.5 text-yellow-400 inline ml-1" />
+    );
+  };
+
+  // Sorted Prizes
+  const sortedPrizes = [...prizes].sort((a, b) => {
+    let result = 0;
+    if (prizeSortField === 'rank') {
+      result = (a.rank_order || 0) - (b.rank_order || 0);
+    } else if (prizeSortField === 'name') {
+      result = (a.name || '').localeCompare(b.name || '', undefined, { numeric: true, sensitivity: 'base' });
+    } else if (prizeSortField === 'category') {
+      result = (a.category || '').localeCompare(b.category || '', undefined, { numeric: true, sensitivity: 'base' });
+    } else if (prizeSortField === 'mode') {
+      result = (a.draw_type || '').localeCompare(b.draw_type || '');
+    } else if (prizeSortField === 'batch') {
+      result = (a.batch_size || 0) - (b.batch_size || 0);
+    } else if (prizeSortField === 'status') {
+      result = Number(a.is_drawn) - Number(b.is_drawn);
+    }
+    return prizeSortDirection === 'asc' ? result : -result;
+  });
+
+  const togglePrizeSort = (field: 'rank' | 'name' | 'category' | 'mode' | 'batch' | 'status') => {
+    if (prizeSortField === field) {
+      setPrizeSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setPrizeSortField(field);
+      setPrizeSortDirection('asc');
+    }
+  };
+
+  const renderPrizeSortIndicator = (field: 'rank' | 'name' | 'category' | 'mode' | 'batch' | 'status') => {
+    if (prizeSortField !== field) {
+      return <ArrowUpDown className="w-3 h-3 text-slate-600 inline ml-1 group-hover:text-slate-400 transition-colors" />;
+    }
+    return prizeSortDirection === 'asc' ? (
+      <ArrowUp className="w-3.5 h-3.5 text-yellow-400 inline ml-1" />
+    ) : (
+      <ArrowDown className="w-3.5 h-3.5 text-yellow-400 inline ml-1" />
+    );
+  };
 
   return (
     <div className="min-h-[calc(100vh-61px)] w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 text-white">
@@ -624,13 +709,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           {/* Participant Table with Filter & Search */}
           <div className="bg-slate-950/80 rounded-2xl border border-slate-800 p-6">
             <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <input
                   type="text"
                   placeholder="Cari nama, tiket, jabatan..."
                   value={partSearch}
                   onChange={(e) => setPartSearch(e.target.value)}
-                  className="bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-1.5 text-xs sm:text-sm text-white placeholder-slate-500 focus:ring-1 focus:ring-yellow-400 focus:outline-none w-64"
+                  className="bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-1.5 text-xs sm:text-sm text-white placeholder-slate-500 focus:ring-1 focus:ring-yellow-400 focus:outline-none w-56 sm:w-64"
                 />
 
                 <select
@@ -642,6 +727,30 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <option value="unwon">Belum Menang Sahaja</option>
                   <option value="won">Sudah Menang Sahaja</option>
                 </select>
+
+                {/* Participant Sort Selector Dropdown */}
+                <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1 text-xs">
+                  <ArrowDownUp className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
+                  <span className="text-slate-400 text-[11px] whitespace-nowrap">Susun:</span>
+                  <select
+                    value={`${partSortField}_${partSortDirection}`}
+                    onChange={(e) => {
+                      const [field, dir] = e.target.value.split('_') as ['ticket' | 'name' | 'department' | 'status', 'asc' | 'desc'];
+                      setPartSortField(field);
+                      setPartSortDirection(dir);
+                    }}
+                    className="bg-slate-950 text-yellow-300 font-bold text-xs px-2 py-1 rounded-lg border border-yellow-500/30 focus:outline-none focus:ring-1 focus:ring-yellow-400 cursor-pointer"
+                  >
+                    <option value="ticket_asc">No. Tiket: Menaik (0-9 / A-Z)</option>
+                    <option value="ticket_desc">No. Tiket: Menurun (9-0 / Z-A)</option>
+                    <option value="name_asc">Nama: A ➔ Z (Menaik)</option>
+                    <option value="name_desc">Nama: Z ➔ A (Menurun)</option>
+                    <option value="department_asc">Jabatan: A ➔ Z (Menaik)</option>
+                    <option value="department_desc">Jabatan: Z ➔ A (Menurun)</option>
+                    <option value="status_asc">Status: Belum Menang Dahulu</option>
+                    <option value="status_desc">Status: Sudah Menang Dahulu</option>
+                  </select>
+                </div>
               </div>
 
               <div className="flex items-center gap-2 text-xs">
@@ -662,19 +771,55 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             <div className="overflow-x-auto max-h-[480px]">
               <table className="w-full text-left text-xs sm:text-sm">
-                <thead className="bg-slate-900/90 text-slate-400 sticky top-0 uppercase tracking-wider text-[11px]">
+                <thead className="bg-slate-900/90 text-slate-400 sticky top-0 uppercase tracking-wider text-[11px] select-none border-b border-slate-800">
                   <tr>
-                    <th className="py-2.5 px-3 w-10 text-center">Bil</th>
-                    <th className="py-2.5 px-3">No. Tiket</th>
-                    <th className="py-2.5 px-3">Nama</th>
-                    <th className="py-2.5 px-3">Jabatan</th>
-                    <th className="py-2.5 px-3">Status</th>
+                    <th className="py-2.5 px-3 w-10 text-center text-slate-500">Bil</th>
+                    <th
+                      onClick={() => togglePartSort('ticket')}
+                      className="py-2.5 px-3 cursor-pointer hover:bg-slate-800/80 transition-colors group"
+                      title="Klik untuk susun No. Tiket"
+                    >
+                      <span className="group-hover:text-yellow-400 inline-flex items-center">
+                        No. Tiket
+                        {renderPartSortIndicator('ticket')}
+                      </span>
+                    </th>
+                    <th
+                      onClick={() => togglePartSort('name')}
+                      className="py-2.5 px-3 cursor-pointer hover:bg-slate-800/80 transition-colors group"
+                      title="Klik untuk susun Nama Peserta (A-Z / Z-A)"
+                    >
+                      <span className="group-hover:text-yellow-400 inline-flex items-center">
+                        Nama
+                        {renderPartSortIndicator('name')}
+                      </span>
+                    </th>
+                    <th
+                      onClick={() => togglePartSort('department')}
+                      className="py-2.5 px-3 cursor-pointer hover:bg-slate-800/80 transition-colors group"
+                      title="Klik untuk susun Jabatan / Bahagian"
+                    >
+                      <span className="group-hover:text-yellow-400 inline-flex items-center">
+                        Jabatan
+                        {renderPartSortIndicator('department')}
+                      </span>
+                    </th>
+                    <th
+                      onClick={() => togglePartSort('status')}
+                      className="py-2.5 px-3 cursor-pointer hover:bg-slate-800/80 transition-colors group"
+                      title="Klik untuk susun Status Kemenangan"
+                    >
+                      <span className="group-hover:text-yellow-400 inline-flex items-center">
+                        Status
+                        {renderPartSortIndicator('status')}
+                      </span>
+                    </th>
                     <th className="py-2.5 px-3 text-center w-24">Tindakan</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
-                  {filteredParts.length > 0 ? (
-                    filteredParts.map((p, idx) => (
+                  {sortedParts.length > 0 ? (
+                    sortedParts.map((p, idx) => (
                       <tr key={p.id} className="hover:bg-slate-900/40">
                         <td className="py-2.5 px-3 text-center text-slate-500 font-mono text-xs">{idx + 1}</td>
                         <td className="py-2.5 px-3 font-mono font-bold text-yellow-400">{p.ticket_number || '-'}</td>
@@ -793,49 +938,137 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
 
-          {/* Quick Bulk Batch Size Setters */}
-          {prizes.some((p) => p.draw_type === 'batch') && (
-            <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs">
-              <span className="font-semibold text-slate-300">
-                Tukar Saiz Cabutan Sekali Klik untuk Semua Hadiah Pukal:
-              </span>
-              <div className="flex items-center gap-1.5">
-                {[5, 10, 15, 20].map((size) => (
-                  <button
-                    key={size}
-                    onClick={() => {
-                      const updated = prizes.map((p) =>
-                        p.draw_type === 'batch' ? { ...p, batch_size: size } : p
-                      );
-                      onUpdatePrize(updated);
-                    }}
-                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-yellow-500 hover:text-slate-950 border border-slate-700 text-yellow-300 font-bold transition-all text-xs"
-                  >
-                    {size} Sekali Klik
-                  </button>
-                ))}
+          {/* Quick Bulk Batch Size Setters & Prize Sorting Bar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs">
+            {prizes.some((p) => p.draw_type === 'batch') ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-slate-300">
+                  Tukar Saiz Cabutan Sekali Klik:
+                </span>
+                <div className="flex items-center gap-1.5">
+                  {[5, 10, 15, 20].map((size) => (
+                    <button
+                      key={size}
+                      onClick={() => {
+                        const updated = prizes.map((p) =>
+                          p.draw_type === 'batch' ? { ...p, batch_size: size } : p
+                        );
+                        onUpdatePrize(updated);
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-yellow-500 hover:text-slate-950 border border-slate-700 text-yellow-300 font-bold transition-all text-xs"
+                    >
+                      {size}
+                    </button>
+                  ))}
+                </div>
               </div>
+            ) : (
+              <div className="text-slate-450 text-xs">
+                Susun senarai hadiah di bawah mengikut urutan pilihan anda.
+              </div>
+            )}
+
+            {/* Prize Sort Selector Dropdown */}
+            <div className="flex items-center gap-1.5 bg-slate-950 border border-slate-750 rounded-xl px-2.5 py-1 text-xs ml-auto">
+              <ArrowDownUp className="w-3.5 h-3.5 text-yellow-400 flex-shrink-0" />
+              <span className="text-slate-400 text-[11px] whitespace-nowrap">Susun:</span>
+              <select
+                value={`${prizeSortField}_${prizeSortDirection}`}
+                onChange={(e) => {
+                  const [field, dir] = e.target.value.split('_') as ['rank' | 'name' | 'category' | 'mode' | 'batch' | 'status', 'asc' | 'desc'];
+                  setPrizeSortField(field);
+                  setPrizeSortDirection(dir);
+                }}
+                className="bg-slate-900 text-yellow-300 font-bold text-xs px-2 py-1 rounded-lg border border-yellow-500/30 focus:outline-none focus:ring-1 focus:ring-yellow-400 cursor-pointer"
+              >
+                <option value="rank_asc">Urutan Hadiah: 1 ➔ 10 (Menaik)</option>
+                <option value="rank_desc">Urutan Hadiah: 10 ➔ 1 (Menurun / Undur)</option>
+                <option value="name_asc">Tajuk Hadiah: A ➔ Z (Menaik)</option>
+                <option value="name_desc">Tajuk Hadiah: Z ➔ A (Menurun)</option>
+                <option value="category_asc">Kategori: A ➔ Z (Menaik)</option>
+                <option value="category_desc">Kategori: Z ➔ A (Menurun)</option>
+                <option value="mode_asc">Mod Cabutan (Individu dahulu)</option>
+                <option value="mode_desc">Mod Cabutan (Pukal dahulu)</option>
+                <option value="batch_asc">Saiz Batch (Terkecil dahulu)</option>
+                <option value="batch_desc">Saiz Batch (Terbesar dahulu)</option>
+                <option value="status_asc">Status (Belum Cabut Dahulu)</option>
+                <option value="status_desc">Status (Selesai Dahulu)</option>
+              </select>
             </div>
-          )}
+          </div>
 
           {/* Prizes Table with inline name, category, mode, batch editing, and delete */}
           <div className="bg-slate-950/80 rounded-2xl border border-slate-800 overflow-hidden">
             <div className="overflow-x-auto max-h-[580px]">
               <table className="w-full text-left text-xs sm:text-sm">
-                <thead className="bg-slate-900 sticky top-0 uppercase tracking-wider text-[11px] text-slate-400 border-b border-slate-800">
+                <thead className="bg-slate-900 sticky top-0 uppercase tracking-wider text-[11px] text-slate-400 border-b border-slate-800 select-none">
                   <tr>
-                    <th className="py-2.5 px-3 w-16 text-center">Urutan</th>
-                    <th className="py-2.5 px-3">Tajuk / Nama Hadiah (Boleh Edit Terus)</th>
-                    <th className="py-2.5 px-3">Kategori</th>
-                    <th className="py-2.5 px-3">Mod Cabutan</th>
-                    <th className="py-2.5 px-3 text-center">Saiz Batch</th>
-                    <th className="py-2.5 px-3 text-center">Status</th>
+                    <th
+                      onClick={() => togglePrizeSort('rank')}
+                      className="py-2.5 px-3 w-20 text-center cursor-pointer hover:bg-slate-800/80 transition-colors group"
+                      title="Klik untuk susun Urutan Hadiah (1-10 / 10-1)"
+                    >
+                      <span className="group-hover:text-yellow-400 inline-flex items-center justify-center">
+                        Urutan
+                        {renderPrizeSortIndicator('rank')}
+                      </span>
+                    </th>
+                    <th
+                      onClick={() => togglePrizeSort('name')}
+                      className="py-2.5 px-3 cursor-pointer hover:bg-slate-800/80 transition-colors group"
+                      title="Klik untuk susun Tajuk Hadiah (A-Z / Z-A)"
+                    >
+                      <span className="group-hover:text-yellow-400 inline-flex items-center">
+                        Tajuk / Nama Hadiah (Boleh Edit Terus)
+                        {renderPrizeSortIndicator('name')}
+                      </span>
+                    </th>
+                    <th
+                      onClick={() => togglePrizeSort('category')}
+                      className="py-2.5 px-3 cursor-pointer hover:bg-slate-800/80 transition-colors group"
+                      title="Klik untuk susun Kategori Hadiah"
+                    >
+                      <span className="group-hover:text-yellow-400 inline-flex items-center">
+                        Kategori
+                        {renderPrizeSortIndicator('category')}
+                      </span>
+                    </th>
+                    <th
+                      onClick={() => togglePrizeSort('mode')}
+                      className="py-2.5 px-3 cursor-pointer hover:bg-slate-800/80 transition-colors group"
+                      title="Klik untuk susun Mod Cabutan"
+                    >
+                      <span className="group-hover:text-yellow-400 inline-flex items-center">
+                        Mod Cabutan
+                        {renderPrizeSortIndicator('mode')}
+                      </span>
+                    </th>
+                    <th
+                      onClick={() => togglePrizeSort('batch')}
+                      className="py-2.5 px-3 text-center cursor-pointer hover:bg-slate-800/80 transition-colors group"
+                      title="Klik untuk susun Saiz Batch"
+                    >
+                      <span className="group-hover:text-yellow-400 inline-flex items-center justify-center">
+                        Saiz Batch
+                        {renderPrizeSortIndicator('batch')}
+                      </span>
+                    </th>
+                    <th
+                      onClick={() => togglePrizeSort('status')}
+                      className="py-2.5 px-3 text-center cursor-pointer hover:bg-slate-800/80 transition-colors group"
+                      title="Klik untuk susun Status Cabutan"
+                    >
+                      <span className="group-hover:text-yellow-400 inline-flex items-center justify-center">
+                        Status
+                        {renderPrizeSortIndicator('status')}
+                      </span>
+                    </th>
                     <th className="py-2.5 px-3 text-center w-16">Padam</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-850">
-                  {prizes.length > 0 ? (
-                    prizes.map((prz) => (
+                  {sortedPrizes.length > 0 ? (
+                    sortedPrizes.map((prz) => (
                       <tr key={prz.id} className="hover:bg-slate-900/40">
                         {/* Rank order */}
                         <td className="py-2.5 px-3 text-center font-mono font-bold text-yellow-400">

@@ -13,7 +13,10 @@ import {
   Award,
   Sparkles,
   Crown,
-  ArrowDownUp
+  ArrowDownUp,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown
 } from 'lucide-react';
 
 interface WinnersViewProps {
@@ -24,6 +27,22 @@ interface WinnersViewProps {
   onRemoveWinner?: (winnerId: string, participantId: string, prizeId: string) => Promise<void>;
 }
 
+export type WinnerSortOption =
+  | 'rank_desc'
+  | 'rank_asc'
+  | 'ticket_asc'
+  | 'ticket_desc'
+  | 'name_asc'
+  | 'name_desc'
+  | 'dept_asc'
+  | 'dept_desc'
+  | 'prize_asc'
+  | 'prize_desc'
+  | 'cat_asc'
+  | 'cat_desc'
+  | 'time_desc'
+  | 'time_asc';
+
 export const WinnersView: React.FC<WinnersViewProps> = ({
   activeEvent,
   winners,
@@ -33,7 +52,7 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [sortOrder, setSortOrder] = useState<'rank_desc' | 'rank_asc' | 'time_desc' | 'time_asc' | 'name_asc'>('rank_desc');
+  const [sortOrder, setSortOrder] = useState<WinnerSortOption>('rank_desc');
 
   // Helper to extract numerical ranking from prize rank or notes (e.g. "No. 10", "Hadiah No. 10", rank_order 10)
   const getWinnerRank = (w: Winner): number => {
@@ -63,31 +82,112 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
     return matchesSearch && matchesCat;
   });
 
-  // Sort winners according to selected order (Default: rank_desc, e.g. 10 down to 1)
+  // Sort winners according to selected order
   const sortedWinners = [...filteredWinners].sort((a, b) => {
-    if (sortOrder === 'rank_desc') {
-      const rankA = getWinnerRank(a);
-      const rankB = getWinnerRank(b);
-      if (rankB !== rankA) return rankB - rankA; // 10 down to 1
-      return new Date(b.won_at).getTime() - new Date(a.won_at).getTime();
+    const rankA = getWinnerRank(a);
+    const rankB = getWinnerRank(b);
+    const timeA = new Date(a.won_at || 0).getTime();
+    const timeB = new Date(b.won_at || 0).getTime();
+    const nameA = a.participant?.name || '';
+    const nameB = b.participant?.name || '';
+    const ticketA = a.participant?.ticket_number || '';
+    const ticketB = b.participant?.ticket_number || '';
+    const deptA = a.participant?.department || '';
+    const deptB = b.participant?.department || '';
+    const prizeA = a.prize?.name || '';
+    const prizeB = b.prize?.name || '';
+    const catA = a.prize?.category || '';
+    const catB = b.prize?.category || '';
+
+    switch (sortOrder) {
+      case 'rank_desc':
+        if (rankB !== rankA) return rankB - rankA; // 10 down to 1
+        return timeB - timeA;
+      case 'rank_asc':
+        if (rankA !== rankB) return rankA - rankB; // 1 up to 10
+        return timeA - timeB;
+      case 'ticket_asc':
+        return ticketA.localeCompare(ticketB, undefined, { numeric: true, sensitivity: 'base' });
+      case 'ticket_desc':
+        return ticketB.localeCompare(ticketA, undefined, { numeric: true, sensitivity: 'base' });
+      case 'name_asc':
+        return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
+      case 'name_desc':
+        return nameB.localeCompare(nameA, undefined, { numeric: true, sensitivity: 'base' });
+      case 'dept_asc':
+        return deptA.localeCompare(deptB, undefined, { numeric: true, sensitivity: 'base' });
+      case 'dept_desc':
+        return deptB.localeCompare(deptA, undefined, { numeric: true, sensitivity: 'base' });
+      case 'prize_asc':
+        return prizeA.localeCompare(prizeB, undefined, { numeric: true, sensitivity: 'base' });
+      case 'prize_desc':
+        return prizeB.localeCompare(prizeA, undefined, { numeric: true, sensitivity: 'base' });
+      case 'cat_asc':
+        return catA.localeCompare(catB, undefined, { numeric: true, sensitivity: 'base' });
+      case 'cat_desc':
+        return catB.localeCompare(catA, undefined, { numeric: true, sensitivity: 'base' });
+      case 'time_desc':
+        return timeB - timeA;
+      case 'time_asc':
+        return timeA - timeB;
+      default:
+        return 0;
     }
-    if (sortOrder === 'rank_asc') {
-      const rankA = getWinnerRank(a);
-      const rankB = getWinnerRank(b);
-      if (rankA !== rankB) return rankA - rankB; // 1 up to 10
-      return new Date(a.won_at).getTime() - new Date(b.won_at).getTime();
-    }
-    if (sortOrder === 'time_desc') {
-      return new Date(b.won_at).getTime() - new Date(a.won_at).getTime();
-    }
-    if (sortOrder === 'time_asc') {
-      return new Date(a.won_at).getTime() - new Date(b.won_at).getTime();
-    }
-    if (sortOrder === 'name_asc') {
-      return (a.participant?.name || '').localeCompare(b.participant?.name || '');
-    }
-    return 0;
   });
+
+  const toggleColumnSort = (field: 'rank' | 'ticket' | 'name' | 'dept' | 'prize' | 'cat' | 'time') => {
+    switch (field) {
+      case 'rank':
+        setSortOrder(sortOrder === 'rank_desc' ? 'rank_asc' : 'rank_desc');
+        break;
+      case 'ticket':
+        setSortOrder(sortOrder === 'ticket_asc' ? 'ticket_desc' : 'ticket_asc');
+        break;
+      case 'name':
+        setSortOrder(sortOrder === 'name_asc' ? 'name_desc' : 'name_asc');
+        break;
+      case 'dept':
+        setSortOrder(sortOrder === 'dept_asc' ? 'dept_desc' : 'dept_asc');
+        break;
+      case 'prize':
+        setSortOrder(sortOrder === 'prize_asc' ? 'prize_desc' : 'prize_asc');
+        break;
+      case 'cat':
+        setSortOrder(sortOrder === 'cat_asc' ? 'cat_desc' : 'cat_asc');
+        break;
+      case 'time':
+        setSortOrder(sortOrder === 'time_desc' ? 'time_asc' : 'time_desc');
+        break;
+    }
+  };
+
+  const renderSortIndicator = (field: 'rank' | 'ticket' | 'name' | 'dept' | 'prize' | 'cat' | 'time') => {
+    const isAsc =
+      (field === 'rank' && sortOrder === 'rank_asc') ||
+      (field === 'ticket' && sortOrder === 'ticket_asc') ||
+      (field === 'name' && sortOrder === 'name_asc') ||
+      (field === 'dept' && sortOrder === 'dept_asc') ||
+      (field === 'prize' && sortOrder === 'prize_asc') ||
+      (field === 'cat' && sortOrder === 'cat_asc') ||
+      (field === 'time' && sortOrder === 'time_asc');
+
+    const isDesc =
+      (field === 'rank' && sortOrder === 'rank_desc') ||
+      (field === 'ticket' && sortOrder === 'ticket_desc') ||
+      (field === 'name' && sortOrder === 'name_desc') ||
+      (field === 'dept' && sortOrder === 'dept_desc') ||
+      (field === 'prize' && sortOrder === 'prize_desc') ||
+      (field === 'cat' && sortOrder === 'cat_desc') ||
+      (field === 'time' && sortOrder === 'time_desc');
+
+    if (isAsc) {
+      return <ArrowUp className="w-3.5 h-3.5 text-yellow-400 inline ml-1" />;
+    }
+    if (isDesc) {
+      return <ArrowDown className="w-3.5 h-3.5 text-yellow-400 inline ml-1" />;
+    }
+    return <ArrowUpDown className="w-3 h-3 text-slate-600 inline ml-1 group-hover:text-slate-400 transition-colors" />;
+  };
 
   // Dynamic categories from actual winners
   const categories = Array.from(
@@ -223,14 +323,23 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
           <span className="text-slate-400 font-medium whitespace-nowrap">Susunan:</span>
           <select
             value={sortOrder}
-            onChange={(e) => setSortOrder(e.target.value as any)}
+            onChange={(e) => setSortOrder(e.target.value as WinnerSortOption)}
             className="bg-slate-950 text-yellow-300 font-bold text-xs px-2.5 py-1.5 rounded-lg border border-yellow-500/30 focus:outline-none focus:ring-1 focus:ring-yellow-400 cursor-pointer"
           >
-            <option value="rank_desc">Hadiah: 10 ➔ 1 (Menurun / Undur)</option>
-            <option value="rank_asc">Hadiah: 1 ➔ 10 (Menaik)</option>
-            <option value="time_desc">Masa: Terkini Dahulu</option>
-            <option value="time_asc">Masa: Terawal Dahulu</option>
-            <option value="name_asc">Nama: A ➔ Z</option>
+            <option value="rank_desc">Kedudukan: 10 ➔ 1 (Menurun)</option>
+            <option value="rank_asc">Kedudukan: 1 ➔ 10 (Menaik)</option>
+            <option value="ticket_asc">No. Tiket: Menaik (A ➔ Z / 0 ➔ 9)</option>
+            <option value="ticket_desc">No. Tiket: Menurun (Z ➔ A / 9 ➔ 0)</option>
+            <option value="name_asc">Nama: A ➔ Z (Menaik)</option>
+            <option value="name_desc">Nama: Z ➔ A (Menurun)</option>
+            <option value="dept_asc">Jabatan: A ➔ Z (Menaik)</option>
+            <option value="dept_desc">Jabatan: Z ➔ A (Menurun)</option>
+            <option value="prize_asc">Hadiah: A ➔ Z (Menaik)</option>
+            <option value="prize_desc">Hadiah: Z ➔ A (Menurun)</option>
+            <option value="cat_asc">Kategori: A ➔ Z (Menaik)</option>
+            <option value="cat_desc">Kategori: Z ➔ A (Menurun)</option>
+            <option value="time_desc">Masa: Terkini Dahulu (Menurun)</option>
+            <option value="time_asc">Masa: Terawal Dahulu (Menaik)</option>
           </select>
         </div>
 
@@ -269,16 +378,79 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
       <div className="bg-slate-950/80 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
-            <thead className="bg-slate-900/90 text-xs uppercase tracking-wider text-slate-400 border-b border-slate-800">
+            <thead className="bg-slate-900/90 text-xs uppercase tracking-wider text-slate-400 border-b border-slate-800 select-none">
               <tr>
-                <th className="py-3 px-4 w-12 text-center">Bil</th>
-                <th className="py-3 px-4 w-28 text-center">Kedudukan</th>
-                <th className="py-3 px-4">No. Tiket</th>
-                <th className="py-3 px-4">Nama Pemenang</th>
-                <th className="py-3 px-4">Jabatan / Bahagian</th>
-                <th className="py-3 px-4">Hadiah Dimiliki</th>
-                <th className="py-3 px-4">Kategori</th>
-                <th className="py-3 px-4">Masa Cabutan</th>
+                <th className="py-3 px-4 w-12 text-center text-slate-500">Bil</th>
+                <th
+                  onClick={() => toggleColumnSort('rank')}
+                  className="py-3 px-4 w-28 text-center cursor-pointer hover:bg-slate-800/80 transition-colors group"
+                  title="Klik untuk susun Kedudukan Hadiah (10-1 / 1-10)"
+                >
+                  <span className="group-hover:text-yellow-400 inline-flex items-center justify-center">
+                    Kedudukan
+                    {renderSortIndicator('rank')}
+                  </span>
+                </th>
+                <th
+                  onClick={() => toggleColumnSort('ticket')}
+                  className="py-3 px-4 cursor-pointer hover:bg-slate-800/80 transition-colors group"
+                  title="Klik untuk susun mengikut No. Tiket"
+                >
+                  <span className="group-hover:text-yellow-400 inline-flex items-center">
+                    No. Tiket
+                    {renderSortIndicator('ticket')}
+                  </span>
+                </th>
+                <th
+                  onClick={() => toggleColumnSort('name')}
+                  className="py-3 px-4 cursor-pointer hover:bg-slate-800/80 transition-colors group"
+                  title="Klik untuk susun Nama Pemenang (A-Z / Z-A)"
+                >
+                  <span className="group-hover:text-yellow-400 inline-flex items-center">
+                    Nama Pemenang
+                    {renderSortIndicator('name')}
+                  </span>
+                </th>
+                <th
+                  onClick={() => toggleColumnSort('dept')}
+                  className="py-3 px-4 cursor-pointer hover:bg-slate-800/80 transition-colors group"
+                  title="Klik untuk susun Jabatan / Bahagian"
+                >
+                  <span className="group-hover:text-yellow-400 inline-flex items-center">
+                    Jabatan / Bahagian
+                    {renderSortIndicator('dept')}
+                  </span>
+                </th>
+                <th
+                  onClick={() => toggleColumnSort('prize')}
+                  className="py-3 px-4 cursor-pointer hover:bg-slate-800/80 transition-colors group"
+                  title="Klik untuk susun Hadiah Dimiliki"
+                >
+                  <span className="group-hover:text-yellow-400 inline-flex items-center">
+                    Hadiah Dimiliki
+                    {renderSortIndicator('prize')}
+                  </span>
+                </th>
+                <th
+                  onClick={() => toggleColumnSort('cat')}
+                  className="py-3 px-4 cursor-pointer hover:bg-slate-800/80 transition-colors group"
+                  title="Klik untuk susun Kategori Hadiah"
+                >
+                  <span className="group-hover:text-yellow-400 inline-flex items-center">
+                    Kategori
+                    {renderSortIndicator('cat')}
+                  </span>
+                </th>
+                <th
+                  onClick={() => toggleColumnSort('time')}
+                  className="py-3 px-4 cursor-pointer hover:bg-slate-800/80 transition-colors group"
+                  title="Klik untuk susun Masa Cabutan (Terkini / Terawal)"
+                >
+                  <span className="group-hover:text-yellow-400 inline-flex items-center">
+                    Masa Cabutan
+                    {renderSortIndicator('time')}
+                  </span>
+                </th>
                 {onRemoveWinner && <th className="py-3 px-4 text-center print:hidden">Tindakan</th>}
               </tr>
             </thead>
