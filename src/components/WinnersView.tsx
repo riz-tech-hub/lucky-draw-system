@@ -11,7 +11,9 @@ import {
   Medal,
   Users,
   Award,
-  Sparkles
+  Sparkles,
+  Crown,
+  ArrowDownUp
 } from 'lucide-react';
 
 interface WinnersViewProps {
@@ -31,6 +33,16 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [sortOrder, setSortOrder] = useState<'rank_desc' | 'rank_asc' | 'time_desc' | 'time_asc' | 'name_asc'>('rank_desc');
+
+  // Helper to extract numerical ranking from prize rank or notes (e.g. "No. 10", "Hadiah No. 10", rank_order 10)
+  const getWinnerRank = (w: Winner): number => {
+    if (w.notes) {
+      const match = w.notes.match(/\d+/);
+      if (match) return parseInt(match[0], 10);
+    }
+    return w.prize?.rank_order || 0;
+  };
 
   // Filter winners
   const filteredWinners = winners.filter((w) => {
@@ -51,6 +63,32 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
     return matchesSearch && matchesCat;
   });
 
+  // Sort winners according to selected order (Default: rank_desc, e.g. 10 down to 1)
+  const sortedWinners = [...filteredWinners].sort((a, b) => {
+    if (sortOrder === 'rank_desc') {
+      const rankA = getWinnerRank(a);
+      const rankB = getWinnerRank(b);
+      if (rankB !== rankA) return rankB - rankA; // 10 down to 1
+      return new Date(b.won_at).getTime() - new Date(a.won_at).getTime();
+    }
+    if (sortOrder === 'rank_asc') {
+      const rankA = getWinnerRank(a);
+      const rankB = getWinnerRank(b);
+      if (rankA !== rankB) return rankA - rankB; // 1 up to 10
+      return new Date(a.won_at).getTime() - new Date(b.won_at).getTime();
+    }
+    if (sortOrder === 'time_desc') {
+      return new Date(b.won_at).getTime() - new Date(a.won_at).getTime();
+    }
+    if (sortOrder === 'time_asc') {
+      return new Date(a.won_at).getTime() - new Date(b.won_at).getTime();
+    }
+    if (sortOrder === 'name_asc') {
+      return (a.participant?.name || '').localeCompare(b.participant?.name || '');
+    }
+    return 0;
+  });
+
   // Dynamic categories from actual winners
   const categories = Array.from(
     new Set(
@@ -62,22 +100,26 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
 
   // Export to CSV
   const handleExportCSV = () => {
-    if (winners.length === 0) {
+    if (sortedWinners.length === 0) {
       alert('Tiada senarai pemenang untuk dieksport.');
       return;
     }
 
-    const headers = ['Bil', 'No. Tiket', 'Nama Pemenang', 'Jabatan/Kelas', 'Urutan Hadiah', 'Nama Hadiah', 'Kategori', 'Masa Menang'];
-    const rows = winners.map((w, idx) => [
-      idx + 1,
-      `"${w.participant?.ticket_number || ''}"`,
-      `"${w.participant?.name || ''}"`,
-      `"${w.participant?.department || ''}"`,
-      w.prize?.rank_order || '',
-      `"${w.prize?.name || ''}"`,
-      `"${w.prize?.category || ''}"`,
-      `"${w.won_at ? new Date(w.won_at).toLocaleString('ms-MY') : ''}"`,
-    ]);
+    const headers = ['Bil', 'Kedudukan', 'No. Tiket', 'Nama Pemenang', 'Jabatan/Kelas', 'Urutan Hadiah', 'Nama Hadiah', 'Kategori', 'Masa Menang'];
+    const rows = sortedWinners.map((w, idx) => {
+      const rank = getWinnerRank(w);
+      return [
+        idx + 1,
+        `"No. ${rank > 0 ? rank : idx + 1}"`,
+        `"${w.participant?.ticket_number || ''}"`,
+        `"${w.participant?.name || ''}"`,
+        `"${w.participant?.department || ''}"`,
+        w.prize?.rank_order || '',
+        `"${w.prize?.name || ''}"`,
+        `"${w.prize?.category || ''}"`,
+        `"${w.won_at ? new Date(w.won_at).toLocaleString('ms-MY') : ''}"`,
+      ];
+    });
 
     const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
@@ -164,7 +206,7 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
       {/* Search and Filters */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6 print:hidden">
         {/* Search */}
-        <div className="relative flex-1 min-w-[260px] max-w-md">
+        <div className="relative flex-1 min-w-[240px] max-w-sm">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
@@ -173,6 +215,23 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-slate-900/90 border border-slate-700 rounded-xl pl-10 pr-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-yellow-400"
           />
+        </div>
+
+        {/* Sort Selector Dropdown */}
+        <div className="flex items-center gap-2 bg-slate-900/90 px-3 py-1.5 rounded-xl border border-slate-700 text-xs">
+          <ArrowDownUp className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+          <span className="text-slate-400 font-medium whitespace-nowrap">Susunan:</span>
+          <select
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value as any)}
+            className="bg-slate-950 text-yellow-300 font-bold text-xs px-2.5 py-1.5 rounded-lg border border-yellow-500/30 focus:outline-none focus:ring-1 focus:ring-yellow-400 cursor-pointer"
+          >
+            <option value="rank_desc">Hadiah: 10 ➔ 1 (Menurun / Undur)</option>
+            <option value="rank_asc">Hadiah: 1 ➔ 10 (Menaik)</option>
+            <option value="time_desc">Masa: Terkini Dahulu</option>
+            <option value="time_asc">Masa: Terawal Dahulu</option>
+            <option value="name_asc">Nama: A ➔ Z</option>
+          </select>
         </div>
 
         {/* Category Pills */}
@@ -213,6 +272,7 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
             <thead className="bg-slate-900/90 text-xs uppercase tracking-wider text-slate-400 border-b border-slate-800">
               <tr>
                 <th className="py-3 px-4 w-12 text-center">Bil</th>
+                <th className="py-3 px-4 w-28 text-center">Kedudukan</th>
                 <th className="py-3 px-4">No. Tiket</th>
                 <th className="py-3 px-4">Nama Pemenang</th>
                 <th className="py-3 px-4">Jabatan / Bahagian</th>
@@ -223,18 +283,42 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-850">
-              {filteredWinners.length > 0 ? (
-                filteredWinners.map((winner, idx) => {
-                  const isTopRank = (winner.prize?.rank_order || 99) <= 10;
+              {sortedWinners.length > 0 ? (
+                sortedWinners.map((winner, idx) => {
+                  const rank = getWinnerRank(winner);
+                  const isTop1 = rank === 1;
+                  const isTop10 = rank > 0 && rank <= 10;
+
                   return (
                     <tr
                       key={winner.id}
                       className={`hover:bg-slate-900/50 transition-colors ${
-                        isTopRank ? 'bg-yellow-500/5' : ''
+                        isTop1 ? 'bg-yellow-500/10' : isTop10 ? 'bg-yellow-500/5' : ''
                       }`}
                     >
                       <td className="py-3 px-4 text-center font-mono text-xs text-slate-500">
                         {idx + 1}
+                      </td>
+
+                      <td className="py-3 px-4 text-center">
+                        {isTop1 ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-500/30 text-amber-300 font-black text-xs border border-amber-400 shadow-sm shadow-amber-500/30">
+                            <Crown className="w-3.5 h-3.5 text-yellow-300" />
+                            <span>No. 1</span>
+                          </span>
+                        ) : rank > 0 ? (
+                          <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-lg font-extrabold text-xs border ${
+                            isTop10
+                              ? 'bg-yellow-500/15 text-yellow-300 border-yellow-500/30'
+                              : 'bg-slate-800 text-slate-300 border-slate-700'
+                          }`}>
+                            No. {rank}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center justify-center px-2 py-0.5 rounded text-xs text-slate-400">
+                            -
+                          </span>
+                        )}
                       </td>
 
                       <td className="py-3 px-4">
@@ -245,7 +329,11 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
 
                       <td className="py-3 px-4 font-bold text-white">
                         <div className="flex items-center gap-2">
-                          {isTopRank && <Medal className="w-4 h-4 text-yellow-400 flex-shrink-0" />}
+                          {isTop1 ? (
+                            <Medal className="w-4 h-4 text-yellow-400 flex-shrink-0 animate-pulse" />
+                          ) : isTop10 ? (
+                            <Medal className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+                          ) : null}
                           <span>{winner.participant?.name || 'Tiada Maklumat'}</span>
                         </div>
                       </td>
@@ -256,8 +344,13 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
 
                       <td className="py-3 px-4">
                         <div className="font-bold text-amber-200">
-                          #{winner.prize?.rank_order} - {winner.prize?.name}
+                          {winner.prize?.name || 'Hadiah'}
                         </div>
+                        {winner.notes && winner.notes !== `No. ${rank}` && (
+                          <div className="text-[11px] text-amber-400/80 font-medium">
+                            {winner.notes}
+                          </div>
+                        )}
                       </td>
 
                       <td className="py-3 px-4">
@@ -279,7 +372,11 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
                           <button
                             onClick={() => {
                               if (confirm(`Pasti ingin batalkan kemenangan ${winner.participant?.name}? Status peserta ini akan dikembalikan kepada belum menang.`)) {
-                                onRemoveWinner(winner.id, winner.participant_id, winner.prize_id);
+                                onRemoveWinner(
+                                  winner.id,
+                                  winner.participant_id || winner.participant?.id || '',
+                                  winner.prize_id || winner.prize?.id || ''
+                                );
                               }
                             }}
                             title="Batalkan kemenangan peserta ini"
@@ -294,7 +391,7 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
                 })
               ) : (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-500">
+                  <td colSpan={onRemoveWinner ? 9 : 8} className="py-12 text-center text-slate-500">
                     <Sparkles className="w-10 h-10 mx-auto text-slate-600 mb-2" />
                     <p className="font-semibold text-slate-400">Tiada rekod pemenang dijumpai</p>
                     <p className="text-xs text-slate-600 mt-1">

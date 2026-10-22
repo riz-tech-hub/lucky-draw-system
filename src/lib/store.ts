@@ -463,6 +463,8 @@ export const DataStore = {
   // ----------------------------------------------------------------------------
   // WINNERS & DRAW RECORDING
   // ----------------------------------------------------------------------------
+  // WINNERS & DRAW RECORDING
+  // ----------------------------------------------------------------------------
   async getWinners(eventId: string): Promise<Winner[]> {
     if (isSupabaseConfigured() && supabase) {
       try {
@@ -471,7 +473,7 @@ export const DataStore = {
           .select('*, prize:prizes(*), participant:participants(*)')
           .eq('event_id', eventId)
           .order('won_at', { ascending: false });
-        if (!error && data) {
+        if (!error && data && data.length > 0) {
           if (typeof window !== 'undefined') {
             localStorage.setItem(`${LS_KEYS.WINNERS}_${eventId}`, JSON.stringify(data));
           }
@@ -494,8 +496,8 @@ export const DataStore = {
       // Hydrate
       return winners.map((w) => ({
         ...w,
-        participant: participants.find((p) => p.id === w.participant_id),
-        prize: prizes.find((prz) => prz.id === w.prize_id),
+        participant: participants.find((p) => p.id === w.participant_id) || w.participant,
+        prize: prizes.find((prz) => prz.id === w.prize_id) || w.prize,
       }));
     } catch {
       return [];
@@ -511,15 +513,17 @@ export const DataStore = {
   async commitWinners(
     eventId: string,
     prizeId: string,
-    participantIds: string[]
+    participantIds: string[],
+    notesList?: string[]
   ): Promise<Winner[]> {
     const now = new Date().toISOString();
-    const newWinners: Winner[] = participantIds.map((pId) => ({
+    const newWinners: Winner[] = participantIds.map((pId, idx) => ({
       id: generateUUID(),
       event_id: eventId,
       prize_id: prizeId,
       participant_id: pId,
       won_at: now,
+      notes: notesList?.[idx] || undefined,
     }));
 
     // Update participants & prizes in store
@@ -556,19 +560,57 @@ export const DataStore = {
       }
     }
 
-    return this.getWinners(eventId);
+    return updatedWinners.map((w) => ({
+      ...w,
+      participant: allParticipants.find((p) => p.id === w.participant_id) || w.participant,
+      prize: allPrizes.find((prz) => prz.id === w.prize_id) || w.prize,
+    }));
   },
 
   /**
    * Re-spin/remove an individual winner (e.g., absent)
    */
-  async cancelWinner(eventId: string, winnerId: string, participantId: string, prizeId: string): Promise<void> {
-    const currentWinners = await this.getWinners(eventId);
-    const filteredWinners = currentWinners.filter((w) => w.id !== winnerId);
+  async cancelWinner(eventId: string, winnerId: string, participantId: string, prizeId: string): Promise<Winner[]> {
+    // 1. Load current winners (check localStorage first to ensure we don't clobber)
+    let currentWinners: Winner[] = [];
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem(`${LS_KEYS.WINNERS}_${eventId}`);
+      if (stored) {
+        try {
+          currentWinners = JSON.parse(stored);
+        } catch {}
+      }
+    }
+    if (currentWinners.length === 0) {
+      currentWinners = await this.getWinners(eventId);
+    }
+
+    // 2. Filter out strictly the single target winner
+    const targetWinnerId = winnerId ? String(winnerId) : '';
+    const targetParticipantId = participantId ? String(participantId) : '';
+
+    const filteredWinners = currentWinners.filter((w) => {
+      // 1. Direct ID match
+      if (targetWinnerId && String(w.id) === targetWinnerId) {
+        return false;
+      }
+      // 2. Fallback participant ID match
+      const wPartId = String(w.participant_id || w.participant?.id || '');
+      const wPrizeId = String(w.prize_id || w.prize?.id || '');
+      if (targetParticipantId && wPartId === targetParticipantId) {
+        if (!prizeId || wPrizeId === String(prizeId)) {
+          return false;
+        }
+      }
+      return true;
+    });
+
+    // 3. Save to localStorage
     if (typeof window !== 'undefined') {
       localStorage.setItem(`${LS_KEYS.WINNERS}_${eventId}`, JSON.stringify(filteredWinners));
     }
 
+    // 4. Update participant is_winner flag
     const participants = await this.getParticipants(eventId);
     const targetP = participants.find((p) => p.id === participantId);
     if (targetP) {
@@ -576,14 +618,38 @@ export const DataStore = {
       await this.saveParticipants(eventId, participants);
     }
 
+    // 5. Update prize is_drawn flag if no more winners for this prize
+    const hasRemainingForPrize = filteredWinners.some((w) => w.prize_id === prizeId);
+    const prizes = await this.getPrizes(eventId);
+    const targetPrize = prizes.find((p) => p.id === prizeId);
+    if (targetPrize && !hasRemainingForPrize) {
+      targetPrize.is_drawn = false;
+      await this.savePrizes(eventId, prizes);
+    }
+
+    // 6. Delete from Supabase if configured
     if (isSupabaseConfigured() && supabase) {
       try {
-        await supabase.from('winners').delete().eq('id', winnerId);
+        if (winnerId) {
+          await supabase.from('winners').delete().eq('id', winnerId);
+        } else {
+          await supabase.from('winners').delete().match({ prize_id: prizeId, participant_id: participantId });
+        }
         await supabase.from('participants').update({ is_winner: false }).eq('id', participantId);
+        if (targetPrize && !hasRemainingForPrize) {
+          await supabase.from('prizes').update({ is_drawn: false }).eq('id', prizeId);
+        }
       } catch (err) {
         console.error('Supabase cancelWinner error:', err);
       }
     }
+
+    // 7. Return hydrated remaining winners
+    return filteredWinners.map((w) => ({
+      ...w,
+      participant: participants.find((p) => p.id === w.participant_id) || w.participant,
+      prize: prizes.find((prz) => prz.id === w.prize_id) || w.prize,
+    }));
   },
 
   /**

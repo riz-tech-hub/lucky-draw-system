@@ -7,6 +7,7 @@ import { sound } from '@/lib/sound';
 import { fireConfettiBatch } from '@/lib/confetti';
 import {
   Trophy,
+  Crown,
   RefreshCw,
   CheckCircle2,
   AlertCircle,
@@ -15,14 +16,15 @@ import {
   RotateCcw,
   Sliders,
   Plus,
-  Minus
+  Minus,
+  ArrowDownUp
 } from 'lucide-react';
 
 interface BatchDrawProps {
   prize: Prize;
   eligibleParticipants: Participant[];
   allParticipants: Participant[];
-  onConfirmWinners: (prize: Prize, selectedParticipants: Participant[]) => Promise<void>;
+  onConfirmWinners: (prize: Prize, selectedParticipants: Participant[], notes?: string[]) => Promise<void>;
   onDrawNextPrize?: () => void;
   participantMode?: 'both' | 'name_only' | 'ticket_only';
 }
@@ -36,6 +38,7 @@ export const BatchDraw: React.FC<BatchDrawProps> = ({
 }) => {
   // Configurable batch count (defaults to prize.batch_size or 10)
   const [batchCount, setBatchCount] = useState<number>(prize.batch_size || 10);
+  const [sortOrder, setSortOrder] = useState<'desc' | 'asc'>('desc'); // 'desc' = 10 -> 1, 'asc' = 1 -> 10
   const [isSpinning, setIsSpinning] = useState(false);
   const [pendingWinners, setPendingWinners] = useState<Participant[]>([]);
   const [rollingDisplay, setRollingDisplay] = useState<Participant[]>([]);
@@ -155,7 +158,11 @@ export const BatchDraw: React.FC<BatchDrawProps> = ({
     if (pendingWinners.length === 0 || saving) return;
     setSaving(true);
     try {
-      await onConfirmWinners(prize, pendingWinners);
+      const notesList = pendingWinners.map((_, idx) => {
+        const slotNum = sortOrder === 'desc' ? batchCount - idx : idx + 1;
+        return `No. ${slotNum}`;
+      });
+      await onConfirmWinners(prize, pendingWinners, notesList);
       setIsConfirmed(true);
       fireConfettiBatch();
     } catch (err) {
@@ -198,6 +205,19 @@ export const BatchDraw: React.FC<BatchDrawProps> = ({
 
         {/* Dynamic Draw Count Controls */}
         <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end">
+          {/* Sort Order Toggle */}
+          {!isSpinning && !isConfirmed && (
+            <button
+              type="button"
+              onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-yellow-500/30 text-xs font-bold text-yellow-300 hover:text-white transition-all shadow"
+              title="Tukar susunan turutan pemenang (cth: 10 ke 1 atau 1 ke 10)"
+            >
+              <ArrowDownUp className="w-3.5 h-3.5 text-yellow-400" />
+              <span>Turutan: <strong className="text-white underline">{sortOrder === 'desc' ? `${batchCount} ➔ 1` : `1 ➔ ${batchCount}`}</strong></span>
+            </button>
+          )}
+
           {/* Batch Size Stepper & Quick Pills */}
           {!isSpinning && !isConfirmed && pendingWinners.length === 0 && (
             <div className="flex items-center gap-2 bg-slate-900/90 p-1.5 rounded-xl border border-yellow-500/30">
@@ -280,13 +300,17 @@ export const BatchDraw: React.FC<BatchDrawProps> = ({
           const participant = currentDisplay[index];
           const isSlotRevealed = !isSpinning && index < revealedCount;
           const isSlotCurrentlyRolling = isSpinning;
+          const slotNumber = sortOrder === 'desc' ? batchCount - index : index + 1;
+          const isGrandTop1 = slotNumber === 1;
 
           return (
             <div
               key={index}
               className={`relative group rounded-xl p-4 flex flex-col justify-between transition-all duration-300 min-h-[145px] ${
                 isSlotRevealed
-                  ? 'bg-gradient-to-b from-slate-900 via-slate-900/90 to-yellow-950/40 border-2 border-yellow-500/70 shadow-lg shadow-yellow-500/20 scale-[1.02]'
+                  ? isGrandTop1
+                    ? 'bg-gradient-to-b from-yellow-500/25 via-slate-900 to-amber-950/70 border-2 border-yellow-400 shadow-xl shadow-yellow-500/30 scale-[1.04] ring-2 ring-yellow-400/50 z-10'
+                    : 'bg-gradient-to-b from-slate-900 via-slate-900/90 to-yellow-950/40 border-2 border-yellow-500/70 shadow-lg shadow-yellow-500/20 scale-[1.02]'
                   : isSlotCurrentlyRolling
                   ? 'bg-slate-900/90 border border-yellow-500/40 animate-pulse'
                   : 'bg-slate-950/70 border border-slate-800/80'
@@ -294,9 +318,16 @@ export const BatchDraw: React.FC<BatchDrawProps> = ({
             >
               {/* Slot Index Badge */}
               <div className="flex items-center justify-between mb-2">
-                <span className="inline-flex items-center justify-center w-6 h-6 rounded-md bg-yellow-500/20 text-yellow-300 font-bold text-xs border border-yellow-500/30">
-                  {index + 1}
-                </span>
+                {isGrandTop1 ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/30 text-amber-300 font-black text-xs border border-amber-400 shadow-sm shadow-amber-500/30">
+                    <Crown className="w-3.5 h-3.5 text-yellow-300" />
+                    <span>No. 1</span>
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-md bg-yellow-500/20 text-yellow-300 font-bold text-xs border border-yellow-500/30">
+                    No. {slotNumber}
+                  </span>
+                )}
 
                 {/* Single replacement button if participant absent */}
                 {isSlotRevealed && !isConfirmed && (
@@ -348,7 +379,9 @@ export const BatchDraw: React.FC<BatchDrawProps> = ({
               ) : (
                 <div className="my-auto text-center text-slate-600">
                   <div className="text-2xl font-black tracking-wider opacity-40">????</div>
-                  <div className="text-[11px] text-slate-500 mt-1">Sedia Dicabut</div>
+                  <div className="text-[11px] font-semibold mt-1 text-slate-400">
+                    {isGrandTop1 ? '🏆 Hadiah No. 1' : `Hadiah No. ${slotNumber}`}
+                  </div>
                 </div>
               )}
 

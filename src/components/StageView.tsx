@@ -21,7 +21,7 @@ interface StageViewProps {
   prizes: Prize[];
   participants: Participant[];
   winners: Winner[];
-  onConfirmWinners: (prize: Prize, selected: Participant[]) => Promise<void>;
+  onConfirmWinners: (prize: Prize, selected: Participant[], notes?: string[]) => Promise<void>;
   onRefreshData: () => Promise<void>;
 }
 
@@ -219,7 +219,7 @@ export const StageView: React.FC<StageViewProps> = ({
               eligibleParticipants={eligibleParticipants}
               allParticipants={participants}
               onConfirmWinner={async (prz, winner) => {
-                await onConfirmWinners(prz, [winner]);
+                await onConfirmWinners(prz, [winner], [prz.rank_order ? `No. ${prz.rank_order}` : 'Hadiah Utama']);
               }}
               participantMode={activeEvent.participant_mode || 'both'}
             />

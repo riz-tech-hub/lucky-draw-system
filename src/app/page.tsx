@@ -61,9 +61,9 @@ export default function LuckyDrawApp() {
   };
 
   // Confirm and Commit Drawn Winners
-  const handleConfirmWinners = async (prize: Prize, selected: Participant[]) => {
+  const handleConfirmWinners = async (prize: Prize, selected: Participant[], notes?: string[]) => {
     const pIds = selected.map((p) => p.id);
-    const updatedWinners = await DataStore.commitWinners(activeEvent.id, prize.id, pIds);
+    const updatedWinners = await DataStore.commitWinners(activeEvent.id, prize.id, pIds, notes);
 
     // Refresh state
     const [parts, przs] = await Promise.all([
@@ -78,15 +78,14 @@ export default function LuckyDrawApp() {
 
   // Remove/Cancel single winner (e.g. absent)
   const handleRemoveWinner = async (winnerId: string, participantId: string, prizeId: string) => {
-    await DataStore.cancelWinner(activeEvent.id, winnerId, participantId, prizeId);
-    const [parts, przs, wins] = await Promise.all([
+    const remainingWinners = await DataStore.cancelWinner(activeEvent.id, winnerId, participantId, prizeId);
+    const [parts, przs] = await Promise.all([
       DataStore.getParticipants(activeEvent.id),
       DataStore.getPrizes(activeEvent.id),
-      DataStore.getWinners(activeEvent.id),
     ]);
     setParticipants(parts);
     setPrizes(przs);
-    setWinners(wins);
+    setWinners(remainingWinners);
   };
 
   // Event Theme Save
