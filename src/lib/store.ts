@@ -653,6 +653,95 @@ export const DataStore = {
   },
 
   /**
+   * Bulk cancel multiple winners (e.g. absent, redraw)
+   */
+  async bulkCancelWinners(eventId: string, winnerIds: string[]): Promise<Winner[]> {
+    if (!winnerIds || winnerIds.length === 0) return this.getWinners(eventId);
+
+    const winnerIdSet = new Set(winnerIds.map((id) => String(id)));
+
+    // 1. Load current winners (localStorage first)
+    let currentWinners: Winner[] = [];
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem(`${LS_KEYS.WINNERS}_${eventId}`);
+      if (stored) {
+        try {
+          currentWinners = JSON.parse(stored);
+        } catch {}
+      }
+    }
+    if (currentWinners.length === 0) {
+      currentWinners = await this.getWinners(eventId);
+    }
+
+    // 2. Identify the winners being removed vs remaining
+    const removedWinners = currentWinners.filter((w) => winnerIdSet.has(String(w.id)));
+    const remainingWinners = currentWinners.filter((w) => !winnerIdSet.has(String(w.id)));
+
+    const affectedParticipantIds = new Set(
+      removedWinners.map((w) => String(w.participant_id || w.participant?.id)).filter(Boolean)
+    );
+    const affectedPrizeIds = new Set(
+      removedWinners.map((w) => String(w.prize_id || w.prize?.id)).filter(Boolean)
+    );
+
+    // 3. Update participants
+    const participants = await this.getParticipants(eventId);
+    participants.forEach((p) => {
+      if (affectedParticipantIds.has(String(p.id))) {
+        p.is_winner = false;
+      }
+    });
+
+    // 4. Update prizes: if a prize has no more winners in remainingWinners, set is_drawn = false
+    const prizes = await this.getPrizes(eventId);
+    prizes.forEach((prz) => {
+      if (affectedPrizeIds.has(String(prz.id))) {
+        const stillHasWinner = remainingWinners.some(
+          (rw) => String(rw.prize_id || rw.prize?.id) === String(prz.id)
+        );
+        if (!stillHasWinner) {
+          prz.is_drawn = false;
+        }
+      }
+    });
+
+    // 5. Save locally
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(`${LS_KEYS.WINNERS}_${eventId}`, JSON.stringify(remainingWinners));
+      localStorage.setItem(`${LS_KEYS.PARTICIPANTS}_${eventId}`, JSON.stringify(participants));
+      localStorage.setItem(`${LS_KEYS.PRIZES}_${eventId}`, JSON.stringify(prizes));
+    }
+
+    // 6. Sync to Supabase
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        await supabase.from('winners').delete().in('id', Array.from(winnerIdSet));
+        if (affectedParticipantIds.size > 0) {
+          await supabase.from('participants').update({ is_winner: false }).in('id', Array.from(affectedParticipantIds));
+        }
+        for (const przId of Array.from(affectedPrizeIds)) {
+          const stillHasWinner = remainingWinners.some(
+            (rw) => String(rw.prize_id || rw.prize?.id) === przId
+          );
+          if (!stillHasWinner) {
+            await supabase.from('prizes').update({ is_drawn: false }).eq('id', przId);
+          }
+        }
+      } catch (err) {
+        console.error('Supabase bulkCancelWinners error:', err);
+      }
+    }
+
+    // 7. Return hydrated remaining winners
+    return remainingWinners.map((w) => ({
+      ...w,
+      participant: participants.find((p) => p.id === w.participant_id) || w.participant,
+      prize: prizes.find((prz) => prz.id === w.prize_id) || w.prize,
+    }));
+  },
+
+  /**
    * Reset all winners and participant statuses (Fresh Start)
    * KEEPS user's custom participants and prizes intact!
    */

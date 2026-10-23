@@ -40,9 +40,13 @@ interface AdminDashboardProps {
   onDeleteParticipant: (id: string) => Promise<void>;
   onClearParticipants: () => Promise<void>;
   onResetParticipantsStatus: () => Promise<void>;
+  onBulkDeleteParticipants?: (ids: string[]) => Promise<void>;
+  onBulkUpdateParticipantsStatus?: (ids: string[], isWinner: boolean) => Promise<void>;
   onReset74Prizes: () => Promise<void>;
   onAddPrize: (prize: Omit<Prize, 'id' | 'is_drawn' | 'created_at'>) => Promise<void>;
   onDeletePrize: (id: string) => Promise<void>;
+  onBulkDeletePrizes?: (prizeIds: string[]) => Promise<void>;
+  onBulkUpdatePrizes?: (prizeIds: string[], updates: Partial<Prize>) => Promise<void>;
   onClearAllPrizes: () => Promise<void>;
   onGenerateCustomPrizes: (total: number, grand: number, batch: number) => Promise<void>;
   onUpdatePrize: (updatedPrizes: Prize[]) => Promise<void>;
@@ -63,15 +67,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onDeleteParticipant,
   onClearParticipants,
   onResetParticipantsStatus,
+  onBulkDeleteParticipants,
+  onBulkUpdateParticipantsStatus,
   onReset74Prizes,
   onAddPrize,
   onDeletePrize,
+  onBulkDeletePrizes,
+  onBulkUpdatePrizes,
   onClearAllPrizes,
   onGenerateCustomPrizes,
   onUpdatePrize,
   onResetAllDraws,
 }) => {
   const [activeTab, setActiveTab] = useState<'participants' | 'prizes' | 'theme' | 'danger'>('participants');
+
+  // Bulk selection states
+  const [selectedPartIds, setSelectedPartIds] = useState<string[]>([]);
+  const [selectedPrizeIds, setSelectedPrizeIds] = useState<string[]>([]);
 
   // Custom prize modals state
   const [showAddPrizeModal, setShowAddPrizeModal] = useState(false);
@@ -474,6 +486,91 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     );
   };
 
+  // Participant bulk actions
+  const handleToggleSelectPart = (id: string) => {
+    setSelectedPartIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllParts = () => {
+    if (selectedPartIds.length === sortedParts.length) {
+      setSelectedPartIds([]);
+    } else {
+      setSelectedPartIds(sortedParts.map((p) => p.id));
+    }
+  };
+
+  const handleExecuteBulkDeleteParts = async () => {
+    if (selectedPartIds.length === 0) return;
+    if (!confirm(`Pasti ingin memadam ${selectedPartIds.length} peserta yang dipilih?`)) return;
+    if (onBulkDeleteParticipants) {
+      await onBulkDeleteParticipants(selectedPartIds);
+    } else {
+      for (const id of selectedPartIds) {
+        await onDeleteParticipant(id);
+      }
+    }
+    setSelectedPartIds([]);
+  };
+
+  const handleExecuteBulkUpdatePartsStatus = async (isWinner: boolean) => {
+    if (selectedPartIds.length === 0) return;
+    const label = isWinner ? 'Sudah Menang' : 'Belum Menang';
+    if (!confirm(`Tukar status ${selectedPartIds.length} peserta terpilih kepada "${label}"?`)) return;
+    if (onBulkUpdateParticipantsStatus) {
+      await onBulkUpdateParticipantsStatus(selectedPartIds, isWinner);
+    } else {
+      for (const id of selectedPartIds) {
+        const found = participants.find((p) => p.id === id);
+        if (found) {
+          await onUpdateParticipant({ ...found, is_winner: isWinner });
+        }
+      }
+    }
+    setSelectedPartIds([]);
+  };
+
+  // Prize bulk actions
+  const handleToggleSelectPrize = (id: string) => {
+    setSelectedPrizeIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllPrizes = () => {
+    if (selectedPrizeIds.length === sortedPrizes.length) {
+      setSelectedPrizeIds([]);
+    } else {
+      setSelectedPrizeIds(sortedPrizes.map((p) => p.id));
+    }
+  };
+
+  const handleExecuteBulkDeletePrizes = async () => {
+    if (selectedPrizeIds.length === 0) return;
+    if (!confirm(`Pasti ingin memadam ${selectedPrizeIds.length} hadiah yang dipilih?`)) return;
+    if (onBulkDeletePrizes) {
+      await onBulkDeletePrizes(selectedPrizeIds);
+    } else {
+      for (const id of selectedPrizeIds) {
+        await onDeletePrize(id);
+      }
+    }
+    setSelectedPrizeIds([]);
+  };
+
+  const handleExecuteBulkUpdatePrizes = async (updates: Partial<Prize>) => {
+    if (selectedPrizeIds.length === 0) return;
+    if (onBulkUpdatePrizes) {
+      await onBulkUpdatePrizes(selectedPrizeIds, updates);
+    } else {
+      const idSet = new Set(selectedPrizeIds);
+      const updated = prizes.map((p) => (idSet.has(p.id) ? { ...p, ...updates } : p));
+      await onUpdatePrize(updated);
+    }
+    setSelectedPrizeIds([]);
+  };
+
   return (
     <div className="min-h-[calc(100vh-61px)] w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 text-white">
       {/* Title & Quick Navigation */}
@@ -769,10 +866,60 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               </div>
             </div>
 
+            {/* Participant Bulk Actions Bar */}
+            {selectedPartIds.length > 0 && (
+              <div className="mb-4 p-3 rounded-xl bg-slate-900 border border-yellow-500/40 flex flex-wrap items-center justify-between gap-3 shadow-lg">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-300 font-bold text-xs border border-yellow-500/30">
+                    {selectedPartIds.length} Peserta Dipilih
+                  </span>
+                  <span className="text-xs text-slate-400">Tindakan pukal:</span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <button
+                    onClick={() => handleExecuteBulkUpdatePartsStatus(false)}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 font-bold transition-all"
+                    title="Tukar status terpilih kepada belum menang (pemenang berkaitan akan dipadam)"
+                  >
+                    Tukar: Belum Menang
+                  </button>
+                  <button
+                    onClick={() => handleExecuteBulkUpdatePartsStatus(true)}
+                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-yellow-300 border border-slate-700 font-bold transition-all"
+                  >
+                    Tukar: Sudah Menang
+                  </button>
+                  <button
+                    onClick={handleExecuteBulkDeleteParts}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 font-bold transition-all"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Padam Terpilih ({selectedPartIds.length})</span>
+                  </button>
+                  <button
+                    onClick={() => setSelectedPartIds([])}
+                    className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all text-xs"
+                  >
+                    Batal Pilihan
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="overflow-x-auto max-h-[480px]">
               <table className="w-full text-left text-xs sm:text-sm">
                 <thead className="bg-slate-900/90 text-slate-400 sticky top-0 uppercase tracking-wider text-[11px] select-none border-b border-slate-800">
                   <tr>
+                    <th className="py-2.5 px-3 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={sortedParts.length > 0 && selectedPartIds.length === sortedParts.length}
+                        onChange={handleSelectAllParts}
+                        className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-yellow-400 focus:ring-yellow-400 focus:ring-offset-slate-950 cursor-pointer accent-yellow-400"
+                        title="Pilih / Nyahpilih Semua"
+                      />
+                    </th>
                     <th className="py-2.5 px-3 w-10 text-center text-slate-500">Bil</th>
                     <th
                       onClick={() => togglePartSort('ticket')}
@@ -819,50 +966,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </thead>
                 <tbody className="divide-y divide-slate-800">
                   {sortedParts.length > 0 ? (
-                    sortedParts.map((p, idx) => (
-                      <tr key={p.id} className="hover:bg-slate-900/40">
-                        <td className="py-2.5 px-3 text-center text-slate-500 font-mono text-xs">{idx + 1}</td>
-                        <td className="py-2.5 px-3 font-mono font-bold text-yellow-400">{p.ticket_number || '-'}</td>
-                        <td className="py-2.5 px-3 font-semibold text-white">{p.name || '-'}</td>
-                        <td className="py-2.5 px-3 text-slate-400">{p.department || '-'}</td>
-                        <td className="py-2.5 px-3">
-                          {p.is_winner ? (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                              Dah Menang
-                            </span>
-                          ) : (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400">
-                              Belum Menang
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-2.5 px-3 text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button
-                              onClick={() => handleOpenEditPart(p)}
-                              className="p-1.5 rounded-lg bg-slate-900 hover:bg-yellow-500/20 text-slate-400 hover:text-yellow-400 transition-colors border border-slate-800 hover:border-yellow-500/40"
-                              title="Edit maklumat peserta"
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (confirm(`Adakah anda pasti ingin memadam peserta ${p.name || p.ticket_number}?`)) {
-                                  onDeleteParticipant(p.id);
-                                }
-                              }}
-                              className="p-1.5 rounded-lg bg-slate-900 hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors border border-slate-800 hover:border-red-500/40"
-                              title="Padam peserta"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
+                    sortedParts.map((p, idx) => {
+                      const isSelected = selectedPartIds.includes(p.id);
+                      return (
+                        <tr
+                          key={p.id}
+                          className={`hover:bg-slate-900/40 transition-colors ${
+                            isSelected ? 'bg-yellow-500/10' : ''
+                          }`}
+                        >
+                          <td className="py-2.5 px-3 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleSelectPart(p.id)}
+                              className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-yellow-400 focus:ring-yellow-400 focus:ring-offset-slate-950 cursor-pointer accent-yellow-400"
+                            />
+                          </td>
+                          <td className="py-2.5 px-3 text-center text-slate-500 font-mono text-xs">{idx + 1}</td>
+                          <td className="py-2.5 px-3 font-mono font-bold text-yellow-400">{p.ticket_number || '-'}</td>
+                          <td className="py-2.5 px-3 font-semibold text-white">{p.name || '-'}</td>
+                          <td className="py-2.5 px-3 text-slate-400">{p.department || '-'}</td>
+                          <td className="py-2.5 px-3">
+                            {p.is_winner ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                Dah Menang
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400">
+                                Belum Menang
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                onClick={() => handleOpenEditPart(p)}
+                                className="p-1.5 rounded-lg bg-slate-900 hover:bg-yellow-500/20 text-slate-400 hover:text-yellow-400 transition-colors border border-slate-800 hover:border-yellow-500/40"
+                                title="Edit maklumat peserta"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm(`Adakah anda pasti ingin memadam peserta ${p.name || p.ticket_number}?`)) {
+                                    onDeleteParticipant(p.id);
+                                  }
+                                }}
+                                className="p-1.5 rounded-lg bg-slate-900 hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition-colors border border-slate-800 hover:border-red-500/40"
+                                title="Padam peserta"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   ) : (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-slate-500">
+                      <td colSpan={7} className="py-8 text-center text-slate-500">
                         Tiada peserta dijumpai. Sila import atau tambah peserta baru.
                       </td>
                     </tr>
@@ -997,12 +1160,71 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             </div>
           </div>
 
+          {/* Prize Bulk Actions Bar */}
+          {selectedPrizeIds.length > 0 && (
+            <div className="p-3 rounded-xl bg-slate-900 border border-yellow-500/40 flex flex-wrap items-center justify-between gap-3 shadow-lg">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full bg-yellow-500/20 text-yellow-300 font-bold text-xs border border-yellow-500/30">
+                  {selectedPrizeIds.length} Hadiah Dipilih
+                </span>
+                <span className="text-xs text-slate-400">Tindakan pukal:</span>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <button
+                  onClick={() => handleExecuteBulkUpdatePrizes({ draw_type: 'batch', batch_size: 5 })}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-yellow-300 border border-slate-700 font-bold transition-all"
+                >
+                  Tukar Mod: Pukal
+                </button>
+                <button
+                  onClick={() => handleExecuteBulkUpdatePrizes({ draw_type: 'single', batch_size: 1 })}
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-yellow-300 border border-slate-700 font-bold transition-all"
+                >
+                  Tukar Mod: Individu
+                </button>
+                <button
+                  onClick={() => {
+                    if (confirm(`Reset status ${selectedPrizeIds.length} hadiah terpilih kepada Belum Cabut? (Pemenang berkaitan akan dipadam)`)) {
+                      handleExecuteBulkUpdatePrizes({ is_drawn: false });
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-950 hover:bg-emerald-900 text-emerald-300 border border-emerald-800 font-bold transition-all"
+                >
+                  Reset: Belum Cabut
+                </button>
+                <button
+                  onClick={handleExecuteBulkDeletePrizes}
+                  className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 font-bold transition-all"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Padam Terpilih ({selectedPrizeIds.length})</span>
+                </button>
+                <button
+                  onClick={() => setSelectedPrizeIds([])}
+                  className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition-all text-xs"
+                >
+                  Batal Pilihan
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Prizes Table with inline name, category, mode, batch editing, and delete */}
           <div className="bg-slate-950/80 rounded-2xl border border-slate-800 overflow-hidden">
             <div className="overflow-x-auto max-h-[580px]">
               <table className="w-full text-left text-xs sm:text-sm">
                 <thead className="bg-slate-900 sticky top-0 uppercase tracking-wider text-[11px] text-slate-400 border-b border-slate-800 select-none">
                   <tr>
+                    <th className="py-2.5 px-3 w-10 text-center">
+                      <input
+                        type="checkbox"
+                        checked={sortedPrizes.length > 0 && selectedPrizeIds.length === sortedPrizes.length}
+                        onChange={handleSelectAllPrizes}
+                        className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-yellow-400 focus:ring-yellow-400 focus:ring-offset-slate-950 cursor-pointer accent-yellow-400"
+                        title="Pilih / Nyahpilih Semua"
+                      />
+                    </th>
                     <th
                       onClick={() => togglePrizeSort('rank')}
                       className="py-2.5 px-3 w-20 text-center cursor-pointer hover:bg-slate-800/80 transition-colors group"
@@ -1068,121 +1290,139 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </thead>
                 <tbody className="divide-y divide-slate-850">
                   {sortedPrizes.length > 0 ? (
-                    sortedPrizes.map((prz) => (
-                      <tr key={prz.id} className="hover:bg-slate-900/40">
-                        {/* Rank order */}
-                        <td className="py-2.5 px-3 text-center font-mono font-bold text-yellow-400">
-                          #{prz.rank_order}
-                        </td>
-
-                        {/* Editable Name Input */}
-                        <td className="py-2.5 px-3">
-                          <input
-                            type="text"
-                            value={prz.name}
-                            onChange={(e) => {
-                              const newName = e.target.value;
-                              const updated = prizes.map((p) =>
-                                p.id === prz.id ? { ...p, name: newName } : p
-                              );
-                              onUpdatePrize(updated);
-                            }}
-                            className="w-full bg-slate-900/90 border border-slate-750 hover:border-yellow-500/60 focus:border-yellow-400 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm font-semibold text-white focus:outline-none transition-all"
-                            placeholder="Masukkan tajuk hadiah..."
-                          />
-                        </td>
-
-                        {/* Editable Category Input */}
-                        <td className="py-2.5 px-3">
-                          <input
-                            type="text"
-                            value={prz.category}
-                            onChange={(e) => {
-                              const newCat = e.target.value;
-                              const updated = prizes.map((p) =>
-                                p.id === prz.id ? { ...p, category: newCat } : p
-                              );
-                              onUpdatePrize(updated);
-                            }}
-                            className="w-28 sm:w-36 bg-slate-900 border border-slate-750 hover:border-yellow-500/60 focus:border-yellow-400 rounded-lg px-2 py-1 text-xs text-amber-200 focus:outline-none"
-                            placeholder="Kategori"
-                          />
-                        </td>
-
-                        {/* Draw Type Selector */}
-                        <td className="py-2.5 px-3">
-                          <select
-                            value={prz.draw_type}
-                            onChange={(e) => {
-                              const newType = e.target.value as 'batch' | 'single';
-                              const updated = prizes.map((p) =>
-                                p.id === prz.id
-                                  ? { ...p, draw_type: newType, batch_size: newType === 'single' ? 1 : Math.max(2, p.batch_size) }
-                                  : p
-                              );
-                              onUpdatePrize(updated);
-                            }}
-                            className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-yellow-400 cursor-pointer"
-                          >
-                            <option value="single">Individu (1-demi-1)</option>
-                            <option value="batch">Pukal (Batch)</option>
-                          </select>
-                        </td>
-
-                        {/* Batch Size Input */}
-                        <td className="py-2.5 px-3 text-center">
-                          {prz.draw_type === 'batch' ? (
+                    sortedPrizes.map((prz) => {
+                      const isSelected = selectedPrizeIds.includes(prz.id);
+                      return (
+                        <tr
+                          key={prz.id}
+                          className={`hover:bg-slate-900/40 transition-colors ${
+                            isSelected ? 'bg-yellow-500/10' : ''
+                          }`}
+                        >
+                          {/* Row selection checkbox */}
+                          <td className="py-2.5 px-3 text-center">
                             <input
-                              type="number"
-                              min={1}
-                              max={100}
-                              value={prz.batch_size}
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleToggleSelectPrize(prz.id)}
+                              className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-yellow-400 focus:ring-yellow-400 focus:ring-offset-slate-950 cursor-pointer accent-yellow-400"
+                            />
+                          </td>
+
+                          {/* Rank order */}
+                          <td className="py-2.5 px-3 text-center font-mono font-bold text-yellow-400">
+                            #{prz.rank_order}
+                          </td>
+
+                          {/* Editable Name Input */}
+                          <td className="py-2.5 px-3">
+                            <input
+                              type="text"
+                              value={prz.name}
                               onChange={(e) => {
-                                const newSize = Math.max(1, parseInt(e.target.value) || 1);
+                                const newName = e.target.value;
                                 const updated = prizes.map((p) =>
-                                  p.id === prz.id ? { ...p, batch_size: newSize } : p
+                                  p.id === prz.id ? { ...p, name: newName } : p
                                 );
                                 onUpdatePrize(updated);
                               }}
-                              className="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-center font-mono font-bold text-yellow-300 text-xs focus:outline-none focus:border-yellow-400"
+                              className="w-full bg-slate-900/90 border border-slate-750 hover:border-yellow-500/60 focus:border-yellow-400 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm font-semibold text-white focus:outline-none transition-all"
+                              placeholder="Masukkan tajuk hadiah..."
                             />
-                          ) : (
-                            <span className="font-mono text-slate-500 text-xs">1</span>
-                          )}
-                        </td>
+                          </td>
 
-                        {/* Status */}
-                        <td className="py-2.5 px-3 text-center">
-                          {prz.is_drawn ? (
-                            <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                              Selesai
-                            </span>
-                          ) : (
-                            <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-slate-800 text-slate-400">
-                              Belum
-                            </span>
-                          )}
-                        </td>
+                          {/* Editable Category Input */}
+                          <td className="py-2.5 px-3">
+                            <input
+                              type="text"
+                              value={prz.category}
+                              onChange={(e) => {
+                                const newCat = e.target.value;
+                                const updated = prizes.map((p) =>
+                                  p.id === prz.id ? { ...p, category: newCat } : p
+                                );
+                                onUpdatePrize(updated);
+                              }}
+                              className="w-28 sm:w-36 bg-slate-900 border border-slate-750 hover:border-yellow-500/60 focus:border-yellow-400 rounded-lg px-2 py-1 text-xs text-amber-200 focus:outline-none"
+                              placeholder="Kategori"
+                            />
+                          </td>
 
-                        {/* Delete Action */}
-                        <td className="py-2.5 px-3 text-center">
-                          <button
-                            onClick={() => {
-                              if (confirm(`Pasti ingin padam hadiah: "${prz.name}"?`)) {
-                                onDeletePrize(prz.id);
-                              }
-                            }}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                            title="Padam hadiah ini"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                          {/* Draw Type Selector */}
+                          <td className="py-2.5 px-3">
+                            <select
+                              value={prz.draw_type}
+                              onChange={(e) => {
+                                const newType = e.target.value as 'batch' | 'single';
+                                const updated = prizes.map((p) =>
+                                  p.id === prz.id
+                                    ? { ...p, draw_type: newType, batch_size: newType === 'single' ? 1 : Math.max(2, p.batch_size) }
+                                    : p
+                                );
+                                onUpdatePrize(updated);
+                              }}
+                              className="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-yellow-400 cursor-pointer"
+                            >
+                              <option value="single">Individu (1-demi-1)</option>
+                              <option value="batch">Pukal (Batch)</option>
+                            </select>
+                          </td>
+
+                          {/* Batch Size Input */}
+                          <td className="py-2.5 px-3 text-center">
+                            {prz.draw_type === 'batch' ? (
+                              <input
+                                type="number"
+                                min={1}
+                                max={100}
+                                value={prz.batch_size}
+                                onChange={(e) => {
+                                  const newSize = Math.max(1, parseInt(e.target.value) || 1);
+                                  const updated = prizes.map((p) =>
+                                    p.id === prz.id ? { ...p, batch_size: newSize } : p
+                                  );
+                                  onUpdatePrize(updated);
+                                }}
+                                className="w-16 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-center font-mono font-bold text-yellow-300 text-xs focus:outline-none focus:border-yellow-400"
+                              />
+                            ) : (
+                              <span className="font-mono text-slate-500 text-xs">1</span>
+                            )}
+                          </td>
+
+                          {/* Status */}
+                          <td className="py-2.5 px-3 text-center">
+                            {prz.is_drawn ? (
+                              <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                Selesai
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-slate-800 text-slate-400">
+                                Belum
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Delete Action */}
+                          <td className="py-2.5 px-3 text-center">
+                            <button
+                              onClick={() => {
+                                if (confirm(`Pasti ingin padam hadiah: "${prz.name}"?`)) {
+                                  onDeletePrize(prz.id);
+                                }
+                              }}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                              title="Padam hadiah ini"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
                   ) : (
                     <tr>
-                      <td colSpan={7} className="py-12 text-center text-slate-500">
+                      <td colSpan={8} className="py-12 text-center text-slate-500">
                         <Trophy className="w-10 h-10 mx-auto text-slate-600 mb-2" />
                         <p className="font-semibold text-slate-300">Tiada hadiah didaftarkan lagi.</p>
                         <p className="text-xs text-slate-500 mt-1">

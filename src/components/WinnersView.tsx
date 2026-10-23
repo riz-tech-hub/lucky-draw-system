@@ -25,6 +25,7 @@ interface WinnersViewProps {
   prizes: Prize[];
   participants: Participant[];
   onRemoveWinner?: (winnerId: string, participantId: string, prizeId: string) => Promise<void>;
+  onBulkRemoveWinners?: (winnerIds: string[]) => Promise<void>;
 }
 
 export type WinnerSortOption =
@@ -49,10 +50,12 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
   prizes,
   participants,
   onRemoveWinner,
+  onBulkRemoveWinners,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [sortOrder, setSortOrder] = useState<WinnerSortOption>('rank_desc');
+  const [selectedWinnerIds, setSelectedWinnerIds] = useState<string[]>([]);
 
   // Helper to extract numerical ranking from prize rank or notes (e.g. "No. 10", "Hadiah No. 10", rank_order 10)
   const getWinnerRank = (w: Winner): number => {
@@ -236,6 +239,46 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
     window.print();
   };
 
+  const handleToggleSelectWinner = (id: string) => {
+    setSelectedWinnerIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllWinners = () => {
+    if (selectedWinnerIds.length === sortedWinners.length) {
+      setSelectedWinnerIds([]);
+    } else {
+      setSelectedWinnerIds(sortedWinners.map((w) => w.id));
+    }
+  };
+
+  const handleExecuteBulkRemoveWinners = async () => {
+    if (selectedWinnerIds.length === 0) return;
+    if (
+      !confirm(
+        `Adakah anda pasti ingin membatalkan kemenangan bagi ${selectedWinnerIds.length} pemenang yang dipilih? Status peserta-peserta ini akan dikembalikan kepada belum menang secara automatik.`
+      )
+    ) {
+      return;
+    }
+    if (onBulkRemoveWinners) {
+      await onBulkRemoveWinners(selectedWinnerIds);
+    } else if (onRemoveWinner) {
+      for (const wid of selectedWinnerIds) {
+        const found = winners.find((w) => w.id === wid);
+        if (found) {
+          await onRemoveWinner(
+            found.id,
+            found.participant_id || found.participant?.id || '',
+            found.prize_id || found.prize?.id || ''
+          );
+        }
+      }
+    }
+    setSelectedWinnerIds([]);
+  };
+
   return (
     <div className="min-h-[calc(100vh-61px)] w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 text-white">
       {/* Header & Stats Banner */}
@@ -374,12 +417,51 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
         </div>
       </div>
 
+      {/* Floating / Sticky Bulk Action Bar */}
+      {selectedWinnerIds.length > 0 && (
+        <div className="mb-4 p-3.5 rounded-2xl bg-slate-900/95 border border-red-500/40 flex flex-wrap items-center justify-between gap-3 shadow-2xl backdrop-blur-md sticky top-16 z-20 print:hidden animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-center gap-3">
+            <span className="px-3 py-1 rounded-full bg-red-500/20 text-red-400 border border-red-500/30 font-bold text-xs">
+              {selectedWinnerIds.length} Pemenang Dipilih
+            </span>
+            <span className="text-xs text-slate-300">
+              Tindakan pukal untuk pemenang yang ditandakan:
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleExecuteBulkRemoveWinners}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-lg shadow-red-600/30 transition-all hover:scale-105"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span>Batalkan Kemenangan Terpilih ({selectedWinnerIds.length})</span>
+            </button>
+            <button
+              onClick={() => setSelectedWinnerIds([])}
+              className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition-all"
+            >
+              Nyahpilih Semua
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Winners Table */}
       <div className="bg-slate-950/80 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead className="bg-slate-900/90 text-xs uppercase tracking-wider text-slate-400 border-b border-slate-800 select-none">
               <tr>
+                <th className="py-3 px-3 w-10 text-center print:hidden">
+                  <input
+                    type="checkbox"
+                    checked={sortedWinners.length > 0 && selectedWinnerIds.length === sortedWinners.length}
+                    onChange={handleSelectAllWinners}
+                    className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-yellow-400 focus:ring-yellow-400 focus:ring-offset-slate-950 cursor-pointer accent-yellow-400"
+                    title="Pilih / Nyahpilih Semua"
+                  />
+                </th>
                 <th className="py-3 px-4 w-12 text-center text-slate-500">Bil</th>
                 <th
                   onClick={() => toggleColumnSort('rank')}
@@ -460,14 +542,24 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
                   const rank = getWinnerRank(winner);
                   const isTop1 = rank === 1;
                   const isTop10 = rank > 0 && rank <= 10;
+                  const isSelected = selectedWinnerIds.includes(winner.id);
 
                   return (
                     <tr
                       key={winner.id}
                       className={`hover:bg-slate-900/50 transition-colors ${
-                        isTop1 ? 'bg-yellow-500/10' : isTop10 ? 'bg-yellow-500/5' : ''
+                        isSelected ? 'bg-red-950/20' : isTop1 ? 'bg-yellow-500/10' : isTop10 ? 'bg-yellow-500/5' : ''
                       }`}
                     >
+                      <td className="py-3 px-3 text-center print:hidden">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => handleToggleSelectWinner(winner.id)}
+                          className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-yellow-400 focus:ring-yellow-400 focus:ring-offset-slate-950 cursor-pointer accent-yellow-400"
+                        />
+                      </td>
+
                       <td className="py-3 px-4 text-center font-mono text-xs text-slate-500">
                         {idx + 1}
                       </td>
@@ -563,7 +655,7 @@ export const WinnersView: React.FC<WinnersViewProps> = ({
                 })
               ) : (
                 <tr>
-                  <td colSpan={onRemoveWinner ? 9 : 8} className="py-12 text-center text-slate-500">
+                  <td colSpan={onRemoveWinner ? 10 : 9} className="py-12 text-center text-slate-500">
                     <Sparkles className="w-10 h-10 mx-auto text-slate-600 mb-2" />
                     <p className="font-semibold text-slate-400">Tiada rekod pemenang dijumpai</p>
                     <p className="text-xs text-slate-600 mt-1">

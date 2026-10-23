@@ -88,6 +88,18 @@ export default function LuckyDrawApp() {
     setWinners(remainingWinners);
   };
 
+  // Bulk Remove/Cancel winners
+  const handleBulkRemoveWinners = async (winnerIds: string[]) => {
+    const remainingWinners = await DataStore.bulkCancelWinners(activeEvent.id, winnerIds);
+    const [parts, przs] = await Promise.all([
+      DataStore.getParticipants(activeEvent.id),
+      DataStore.getPrizes(activeEvent.id),
+    ]);
+    setParticipants(parts);
+    setPrizes(przs);
+    setWinners(remainingWinners);
+  };
+
   // Event Theme Save
   const handleSaveEvent = async (updatedEvent: EventItem) => {
     await DataStore.saveEvent(updatedEvent);
@@ -154,11 +166,57 @@ export default function LuckyDrawApp() {
     setParticipants([]);
   };
 
-  // Reset Participant Winner Status
+  // Reset Participant Winner Status (Also clears winners and resets prizes!)
   const handleResetParticipantsStatus = async () => {
-    const reset = participants.map((p) => ({ ...p, is_winner: false }));
-    await DataStore.saveParticipants(activeEvent.id, reset);
-    setParticipants(reset);
+    await DataStore.resetAllDraws(activeEvent.id);
+    const [parts, przs, wins] = await Promise.all([
+      DataStore.getParticipants(activeEvent.id),
+      DataStore.getPrizes(activeEvent.id),
+      DataStore.getWinners(activeEvent.id),
+    ]);
+    setParticipants(parts);
+    setPrizes(przs);
+    setWinners(wins);
+    alert('Status semua peserta telah di-reset kepada belum menang, dan senarai pemenang telah dikosongkan secara automatik!');
+  };
+
+  // Bulk Delete Participants
+  const handleBulkDeleteParticipants = async (ids: string[]) => {
+    const idSet = new Set(ids);
+    const remaining = participants.filter((p) => !idSet.has(p.id));
+    await DataStore.saveParticipants(activeEvent.id, remaining);
+    setParticipants(remaining);
+
+    // Also cancel any winners associated with deleted participants
+    const matchingWinnerIds = winners
+      .filter((w) => idSet.has(w.participant_id || w.participant?.id || ''))
+      .map((w) => w.id);
+    if (matchingWinnerIds.length > 0) {
+      const remainingWinners = await DataStore.bulkCancelWinners(activeEvent.id, matchingWinnerIds);
+      setWinners(remainingWinners);
+      const updatedPrizes = await DataStore.getPrizes(activeEvent.id);
+      setPrizes(updatedPrizes);
+    }
+  };
+
+  // Bulk Update Participants Status (Won / Unwon)
+  const handleBulkUpdateParticipantsStatus = async (ids: string[], isWinner: boolean) => {
+    const idSet = new Set(ids);
+    const updated = participants.map((p) => (idSet.has(p.id) ? { ...p, is_winner: isWinner } : p));
+    await DataStore.saveParticipants(activeEvent.id, updated);
+    setParticipants(updated);
+
+    if (!isWinner) {
+      const matchingWinnerIds = winners
+        .filter((w) => idSet.has(w.participant_id || w.participant?.id || ''))
+        .map((w) => w.id);
+      if (matchingWinnerIds.length > 0) {
+        const remainingWinners = await DataStore.bulkCancelWinners(activeEvent.id, matchingWinnerIds);
+        setWinners(remainingWinners);
+        const updatedPrizes = await DataStore.getPrizes(activeEvent.id);
+        setPrizes(updatedPrizes);
+      }
+    }
   };
 
   // Reset 74 Prizes
@@ -178,6 +236,45 @@ export default function LuckyDrawApp() {
   const handleDeletePrize = async (prizeId: string) => {
     await DataStore.deletePrize(activeEvent.id, prizeId);
     setPrizes((prev) => prev.filter((p) => p.id !== prizeId));
+  };
+
+  // Bulk Delete Prizes
+  const handleBulkDeletePrizes = async (prizeIds: string[]) => {
+    const idSet = new Set(prizeIds);
+    const remaining = prizes.filter((p) => !idSet.has(p.id));
+    await DataStore.savePrizes(activeEvent.id, remaining);
+    setPrizes(remaining);
+
+    // Remove any winners for these prizes
+    const matchingWinnerIds = winners
+      .filter((w) => idSet.has(w.prize_id || w.prize?.id || ''))
+      .map((w) => w.id);
+    if (matchingWinnerIds.length > 0) {
+      const remainingWinners = await DataStore.bulkCancelWinners(activeEvent.id, matchingWinnerIds);
+      setWinners(remainingWinners);
+      const updatedParts = await DataStore.getParticipants(activeEvent.id);
+      setParticipants(updatedParts);
+    }
+  };
+
+  // Bulk Update Prizes
+  const handleBulkUpdatePrizes = async (prizeIds: string[], updates: Partial<Prize>) => {
+    const idSet = new Set(prizeIds);
+    const updated = prizes.map((p) => (idSet.has(p.id) ? { ...p, ...updates } : p));
+    await DataStore.savePrizes(activeEvent.id, updated);
+    setPrizes(updated);
+
+    if (updates.is_drawn === false) {
+      const matchingWinnerIds = winners
+        .filter((w) => idSet.has(w.prize_id || w.prize?.id || ''))
+        .map((w) => w.id);
+      if (matchingWinnerIds.length > 0) {
+        const remainingWinners = await DataStore.bulkCancelWinners(activeEvent.id, matchingWinnerIds);
+        setWinners(remainingWinners);
+        const updatedParts = await DataStore.getParticipants(activeEvent.id);
+        setParticipants(updatedParts);
+      }
+    }
   };
 
   // Clear All Prizes (Start from scratch)
@@ -202,7 +299,7 @@ export default function LuckyDrawApp() {
     alert(`Berjaya menjana ${generated.length} hadiah tersuai!`);
   };
 
-  // Update Prizes
+  // Update Prize Array
   const handleUpdatePrize = async (updatedPrizes: Prize[]) => {
     await DataStore.savePrizes(activeEvent.id, updatedPrizes);
     setPrizes(updatedPrizes);
@@ -219,7 +316,6 @@ export default function LuckyDrawApp() {
     setParticipants(parts);
     setPrizes(przs);
     setWinners(wins);
-    alert('Semua cabutan telah di-reset!');
   };
 
   if (isLoading) {
@@ -262,6 +358,7 @@ export default function LuckyDrawApp() {
           prizes={prizes}
           participants={participants}
           onRemoveWinner={handleRemoveWinner}
+          onBulkRemoveWinners={handleBulkRemoveWinners}
         />
       )}
 
@@ -280,9 +377,13 @@ export default function LuckyDrawApp() {
           onDeleteParticipant={handleDeleteParticipant}
           onClearParticipants={handleClearParticipants}
           onResetParticipantsStatus={handleResetParticipantsStatus}
+          onBulkDeleteParticipants={handleBulkDeleteParticipants}
+          onBulkUpdateParticipantsStatus={handleBulkUpdateParticipantsStatus}
           onReset74Prizes={handleReset74Prizes}
           onAddPrize={handleAddPrize}
           onDeletePrize={handleDeletePrize}
+          onBulkDeletePrizes={handleBulkDeletePrizes}
+          onBulkUpdatePrizes={handleBulkUpdatePrizes}
           onClearAllPrizes={handleClearAllPrizes}
           onGenerateCustomPrizes={handleGenerateCustomPrizes}
           onUpdatePrize={handleUpdatePrize}
